@@ -10,6 +10,7 @@
 - `./gradlew run` — запуск; в dev-режиме данные лежат в `./run` (`-Dmint.home`, см. `build.gradle.kts`).
 - `./gradlew packageExe` / `packageMsi` — установщик Windows (jpackage).
 - `java -jar … --headless <ник>` — служебный режим без UI: установить и запустить первую сборку офлайн (`Main.kt`).
+- `./gradlew run --args="--pack-manifest <id>"` — обновить `mint-pack.json` и `.gitignore` сборки; `--pack-sync <id>` — скачать сборку из релиза, как это делает игрок.
 - Git: приватный репозиторий https://github.com/GrayRK/MintLauncher, ветка `main`.
 
 ## Раскладка данных (`core/MintPaths.kt`)
@@ -20,7 +21,7 @@ data/ (в dev — run/)
   runtime/java-21/   Java, скачанная автоматически (Adoptium)
   runtime/authlib-injector.jar
   game/              общие versions / libraries / assets
-  instances/<id>/    папка сборки: instance.json, mods, saves, config …
+  instances/<id>/    папка сборки: instance.json, mint-pack.json, .mint-pack.json (что установлено), mods, saves, config …
   cache/skins/       <uuid>.png + <uuid>.model (slim|classic)
   logs/              game-latest.log
 ```
@@ -36,7 +37,8 @@ data/ (в dev — run/)
   - `Auth.kt` — офлайн-аккаунт (UUID `OfflinePlayer:<ник>`), Yggdrasil-вход (Ely.by по умолчанию или свой authlib-injector сервер), 2FA через `пароль:код`, validate/refresh перед запуском. `AuthlibInjector` — javaagent для игры.
   - `Skins.kt` — скин через sessionserver (`https://authserver.ely.by/api/authlib-injector/sessionserver/session/minecraft/profile/<uuid>` → base64 textures → URL + model). Кэш на диске; офлайн — Стив из клиентского jar.
 - `game/`
-  - `Instance.kt` — модель сборки (`id, name, minecraft, loader VANILLA|NEOFORGE, loaderVersion, memoryMb`) и `Instances` (сканирует `instances/*/instance.json`; если пусто — создаёт `main`: «Mint NeoForge», 1.21.1).
+  - `Instance.kt` — модель сборки (`id, name, minecraft, loader VANILLA|NEOFORGE, loaderVersion, memoryMb, repo`) и `Instances` (сканирует `instances/*/instance.json`, создаёт заглушки официальных сборок).
+  - `Packs.kt` — сборки из GitHub-репозиториев (`Packs.official`). `sync` перед запуском ставит последний релиз: файлы репозитория копируются (правки игрока сохраняются, пока файл не изменился в сборке), внешние файлы из `mint-pack.json` качаются по url+sha1. Папка с `.git` — рабочая копия разработчика, не синхронизируется. `writeManifest` ищет моды/шейдеры/ресурспаки на Modrinth по sha1.
   - `VanillaInstaller.kt` — манифест Mojang, клиент, библиотеки, ассеты.
   - `NeoForgeInstaller.kt` — последняя NeoForge под версию MC с maven.neoforged.net, запуск процессоров инсталлера, маркер `.mint-installed`.
   - `VersionModel.kt` — разбор version json, наследование (`inheritsFrom`), rules, подстановка аргументов.
@@ -54,6 +56,14 @@ data/ (в dev — run/)
   - `Theme.kt` — `MintColors` (светлая/тёмная пары, `MintColors.dark` — Compose-состояние), шрифты Nunito (заголовки) и Manrope (текст), `nunito()`/`manrope()`.
   - `Icons.kt` — `MintIcon` → SVG в `resources/icons` (Phosphor regular; `rotate-3d.svg` нарисован вручную).
   - `TitleBar.kt` — перетаскиваемый заголовок 46dp и кнопки окна.
+
+## Сборки
+
+- Каждая сборка — отдельный **публичный** репозиторий (иначе игроки не скачают). `main` → https://github.com/GrayRK/MintPack-Main.
+- Разработка прямо в `run/instances/<id>` (это git-репозиторий сборки, лаунчерный `.gitignore` исключает `run/`).
+- Цикл: правки → `--pack-manifest <id>` → коммит → `gh release create vX.Y.Z` в репозитории сборки. Игроки получают только релизы.
+- Моды без Modrinth лежат в git сборки (проверять лицензию) или получают `url` в манифесте вручную.
+- Личные данные (saves, options.txt, journeymap, logs…) в `.gitignore` сборки.
 
 ## Правила и договорённости
 
