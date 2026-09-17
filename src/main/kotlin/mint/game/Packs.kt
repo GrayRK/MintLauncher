@@ -66,10 +66,11 @@ private data class PackState(
 )
 
 object Packs {
-    /** Официальные сборки: появляются у игрока сразу после установки лаунчера. */
-    val official = listOf(
-        PackSource("vanillamint", "GrayRK/VanillaMint", "VanillaMint", "1.21.1", Loader.NEOFORGE),
-    )
+    /**
+     * Официальные сборки: появляются у игрока сразу после установки лаунчера.
+     * Пока пусто — раздача сборок через GitHub отложена, сборки только локальные.
+     */
+    val official = emptyList<PackSource>()
 
     const val MANIFEST = "mint-pack.json"
     private const val STATE = ".mint-pack.json"

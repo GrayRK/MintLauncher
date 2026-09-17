@@ -53,6 +53,13 @@ private fun pluralMods(n: Int): String {
 }
 
 object Instances {
+    private val default = Instance(
+        id = "vanillamint",
+        name = "VanillaMint",
+        minecraft = "1.21.1",
+        loader = Loader.NEOFORGE,
+    )
+
     fun all(): List<Instance> {
         // Официальные сборки, которых ещё нет на диске, создаются заглушками —
         // содержимое скачается из репозитория при первом запуске
@@ -65,6 +72,7 @@ object Instances {
             ?.mapNotNull { load(it) }
             ?.sortedBy { dir -> Packs.official.indexOfFirst { it.id == dir.id }.let { if (it < 0) Int.MAX_VALUE else it } }
             .orEmpty()
+            .ifEmpty { listOf(default.also { save(it) }) }
     }
 
     /** id — всегда имя папки: instance.json мог прийти из репозитория с другим id. */
