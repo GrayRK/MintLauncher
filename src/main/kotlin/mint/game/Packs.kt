@@ -24,8 +24,8 @@ import java.util.zip.ZipInputStream
  *
  * Репозиторий сборки = содержимое папки instances/<id>:
  *   instance.json     — описание сборки
- *   mint-pack.json    — внешние файлы (моды, шейдеры…) со ссылками и sha1, лаунчер качает их сам
- *   config/ …         — всё остальное лежит в git как есть
+ *   mint-pack.json    — ссылки и sha1 модов/шейдеров: файлы, которых нет в репозитории, лаунчер качает сам
+ *   mods/, config/ …  — всё остальное лежит в git как есть
  *
  * Игроки получают последний GitHub-релиз. Если в папке сборки есть .git — это рабочая копия
  * разработчика, и лаунчер её не трогает.
@@ -183,13 +183,9 @@ object Packs {
     /** Папки, файлы из которых по возможности подтягиваются по ссылке, а не лежат в git. */
     private val externalDirs = listOf("mods", "shaderpacks", "resourcepacks")
 
-    private const val GITIGNORE_BEGIN = "# >>> mint-pack: внешние файлы (генерируется, не править)"
-    private const val GITIGNORE_END = "# <<< mint-pack"
-
     /**
      * Пересобирает mint-pack.json по содержимому mods/shaderpacks/resourcepacks:
      * файлы ищутся на Modrinth по sha1; ссылки, вписанные вручную, сохраняются, пока совпадает хеш.
-     * Найденные файлы добавляются в .gitignore, остальные должны лежать в git.
      * Возвращает пути файлов, для которых ссылка не найдена.
      */
     suspend fun writeManifest(instance: Instance): List<String> = withContext(Dispatchers.IO) {
@@ -214,7 +210,6 @@ object Packs {
         }
 
         manifestFile.writeText(MintJson.encodeToString(PackManifest.serializer(), PackManifest(entries)) + "\n")
-        updateGitignore(File(dir, ".gitignore"), entries.map { it.path })
         missing
     }
 
@@ -235,19 +230,5 @@ object Packs {
                 ?: return@mapNotNull null
             hash to file["url"]!!.jsonPrimitive.content
         }.toMap()
-    }
-
-    private fun updateGitignore(file: File, paths: List<String>) {
-        val text = if (file.isFile) file.readText() else ""
-        val begin = text.indexOf(GITIGNORE_BEGIN)
-        val end = text.indexOf(GITIGNORE_END)
-        val head = if (begin >= 0 && end > begin) text.substring(0, begin) + text.substring(end + GITIGNORE_END.length).trimStart('\r', '\n')
-        else text
-        val block = buildString {
-            appendLine(GITIGNORE_BEGIN)
-            paths.forEach { appendLine("/$it") }
-            appendLine(GITIGNORE_END)
-        }
-        file.writeText(head.trimEnd() + (if (head.isBlank()) "" else "\n\n") + block)
     }
 }
