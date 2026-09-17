@@ -33,7 +33,7 @@ object GameLauncher {
         java: JavaInfo,
         progress: ProgressSink,
     ): Pair<Instance, ResolvedVersion> {
-        var instance = source
+        var instance = Packs.sync(source, progress)
         if (instance.loader == Loader.NEOFORGE) {
             if (instance.loaderVersion.isBlank()) {
                 progress.report("Поиск последней NeoForge", null)

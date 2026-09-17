@@ -19,6 +19,8 @@ data class Instance(
     val loaderVersion: String = "",
     /** Переопределение памяти для сборки, 0 — из общих настроек. */
     val memoryMb: Int = 0,
+    /** GitHub-репозиторий сборки (owner/name); пусто — локальная сборка или официальная из [Packs.official]. */
+    val repo: String = "",
 ) {
     val dir get() = File(MintPaths.instances, id)
     val modsDir get() = File(dir, "mods")
@@ -51,18 +53,18 @@ private fun pluralMods(n: Int): String {
 }
 
 object Instances {
-    private val default = Instance(
-        id = "main",
-        name = "Mint NeoForge",
-        minecraft = "1.21.1",
-        loader = Loader.NEOFORGE,
-    )
-
     fun all(): List<Instance> {
-        val found = MintPaths.instances.listFiles { f -> f.isDirectory }
+        // Официальные сборки, которых ещё нет на диске, создаются заглушками —
+        // содержимое скачается из репозитория при первом запуске
+        Packs.official.forEach { pack ->
+            if (!File(MintPaths.instances, "${pack.id}/instance.json").isFile) {
+                save(Instance(pack.id, pack.name, pack.minecraft, pack.loader, repo = pack.repo))
+            }
+        }
+        return MintPaths.instances.listFiles { f -> f.isDirectory }
             ?.mapNotNull { load(it) }
+            ?.sortedBy { dir -> Packs.official.indexOfFirst { it.id == dir.id }.let { if (it < 0) Int.MAX_VALUE else it } }
             .orEmpty()
-        return found.ifEmpty { listOf(default.also { save(it) }) }
     }
 
     fun load(dir: File): Instance? = runCatching {

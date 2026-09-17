@@ -30,6 +30,8 @@ import java.awt.Dimension
 
 fun main(args: Array<String>) {
     if (args.firstOrNull() == "--headless") return headless(args.getOrElse(1) { "Steve" })
+    if (args.firstOrNull() == "--pack-manifest") return packManifest(args.getOrElse(1) { "main" })
+    if (args.firstOrNull() == "--pack-sync") return packSync(args.getOrElse(1) { "main" })
     gui()
 }
 
@@ -46,6 +48,28 @@ private fun headless(nick: String) = kotlinx.coroutines.runBlocking {
         onLine = { println("[game] $it") }, onExit = { done.complete(it) },
     )
     println("[mint] game exited with ${done.await()}")
+}
+
+/** Для разработчика сборки: обновить mint-pack.json и .gitignore в папке сборки. */
+private fun packManifest(id: String) = kotlinx.coroutines.runBlocking {
+    val instance = mint.game.Instances.all().firstOrNull { it.id == id }
+        ?: return@runBlocking println("[mint] сборка «$id» не найдена в ${mint.core.MintPaths.instances}")
+    val missing = mint.game.Packs.writeManifest(instance)
+    println("[mint] ${java.io.File(instance.dir, mint.game.Packs.MANIFEST)} обновлён")
+    if (missing.isNotEmpty()) {
+        println("[mint] Не найдены на Modrinth — будут лежать в git (или впишите url в манифест вручную):")
+        missing.forEach { println("  $it") }
+    }
+}
+
+/** Скачать/обновить сборку из её GitHub-релиза так же, как при нажатии «Играть». */
+private fun packSync(id: String) = kotlinx.coroutines.runBlocking {
+    val instance = mint.game.Instances.all().firstOrNull { it.id == id }
+        ?: return@runBlocking println("[mint] сборка «$id» не найдена в ${mint.core.MintPaths.instances}")
+    val progress = mint.game.ProgressSink { stage, f -> println("[mint] $stage ${f?.let { "%.0f%%".format(it * 100) } ?: ""}") }
+    if (mint.game.Packs.isDevCopy(instance)) println("[mint] в папке сборки есть .git — это рабочая копия, синхронизация пропущена")
+    val synced = mint.game.Packs.sync(instance, progress)
+    println("[mint] ${synced.name} · ${synced.minecraft} · ${synced.dir}")
 }
 
 private fun gui() = application {
