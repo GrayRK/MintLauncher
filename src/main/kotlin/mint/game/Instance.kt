@@ -67,8 +67,9 @@ object Instances {
             .orEmpty()
     }
 
+    /** id — всегда имя папки: instance.json мог прийти из репозитория с другим id. */
     fun load(dir: File): Instance? = runCatching {
-        MintJson.decodeFromString<Instance>(File(dir, "instance.json").readText())
+        MintJson.decodeFromString<Instance>(File(dir, "instance.json").readText()).copy(id = dir.name)
     }.getOrNull()
 
     fun save(instance: Instance) {
