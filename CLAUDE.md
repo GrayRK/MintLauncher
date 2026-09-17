@@ -37,7 +37,7 @@ data/ (в dev — run/)
   - `Auth.kt` — офлайн-аккаунт (UUID `OfflinePlayer:<ник>`), Yggdrasil-вход (Ely.by по умолчанию или свой authlib-injector сервер), 2FA через `пароль:код`, validate/refresh перед запуском. `AuthlibInjector` — javaagent для игры.
   - `Skins.kt` — скин через sessionserver (`https://authserver.ely.by/api/authlib-injector/sessionserver/session/minecraft/profile/<uuid>` → base64 textures → URL + model). Кэш на диске; офлайн — Стив из клиентского jar.
 - `game/`
-  - `Instance.kt` — модель сборки (`id, name, minecraft, loader VANILLA|NEOFORGE, loaderVersion, memoryMb, repo`) и `Instances` (сканирует `instances/*/instance.json`, создаёт заглушки официальных сборок).
+  - `Instance.kt` — модель сборки (`id, name, minecraft, loader VANILLA|NEOFORGE, loaderVersion, memoryMb, repo`) и `Instances` (сканирует `instances/*/instance.json`, создаёт заглушки официальных сборок; если сборок нет — локальную `vanillamint`).
   - `Packs.kt` — сборки из GitHub-репозиториев (`Packs.official`). `sync` перед запуском ставит последний релиз: файлы репозитория копируются (правки игрока сохраняются, пока файл не изменился в сборке), внешние файлы из `mint-pack.json` качаются по url+sha1. Папка с `.git` — рабочая копия разработчика, не синхронизируется. `writeManifest` ищет моды/шейдеры/ресурспаки на Modrinth по sha1.
   - `VanillaInstaller.kt` — манифест Mojang, клиент, библиотеки, ассеты.
   - `NeoForgeInstaller.kt` — последняя NeoForge под версию MC с maven.neoforged.net, запуск процессоров инсталлера, маркер `.mint-installed`.
@@ -59,10 +59,8 @@ data/ (в dev — run/)
 
 ## Сборки
 
-- Каждая сборка — отдельный **публичный** репозиторий (иначе игроки не скачают). `vanillamint` → https://github.com/GrayRK/VanillaMint.
-- Разработка прямо в `run/instances/<id>` (это git-репозиторий сборки, лаунчерный `.gitignore` исключает `run/`).
-- Сейчас главное — разработка модпака: в git сборки коммитится **всё содержимое папки** (моды, конфиги, шейдеры, options.txt) для откатов. Не коммитятся миры (`saves`, `journeymap/data`), логи, кэши, скриншоты.
-- Для игроков (позже): `--pack-manifest <id>` → коммит → `gh release create vX.Y.Z`. Игроки получают только релизы. Моды без Modrinth получают `url` в `mint-pack.json` вручную.
+- Сейчас сборки только локальные: разработка модпака прямо в `run/instances/vanillamint` («VanillaMint», NeoForge 1.21.1), без git.
+- Раздача сборок игрокам через GitHub-релизы реализована в `Packs.kt`, но отключена (`Packs.official` пуст). Чтобы включить: публичный репозиторий сборки, `--pack-manifest <id>`, `gh release create`, запись в `Packs.official`. Папка сборки с `.git` не синхронизируется.
 
 ## Правила и договорённости
 
