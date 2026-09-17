@@ -30,18 +30,22 @@ kotlin {
 compose.desktop {
     application {
         mainClass = "mint.MainKt"
-        // В режиме разработки данные лаунчера лежат в ./run
-        jvmArgs += listOf("-Dmint.home=${rootDir.resolve("run").absolutePath}")
 
         nativeDistributions {
             targetFormats(TargetFormat.Exe, TargetFormat.Msi)
             packageName = "Mint"
             packageVersion = "1.0.0"
-            modules("java.net.http", "jdk.crypto.ec", "jdk.zipfs")
+            modules("java.instrument", "java.net.http", "jdk.crypto.ec", "jdk.management", "jdk.unsupported", "jdk.zipfs")
             windows {
                 menuGroup = "Mint"
                 upgradeUuid = "6a3b0f0e-5d7c-4c61-9d7b-3f5a1d2e9c41"
             }
         }
     }
+}
+
+// В режиме разработки (./gradlew run) данные лаунчера лежат в ./run.
+// Только для задачи run: в jvmArgs приложения путь попал бы в собранный exe.
+tasks.withType<JavaExec>().configureEach {
+    if (name == "run") systemProperty("mint.home", rootDir.resolve("run").absolutePath)
 }

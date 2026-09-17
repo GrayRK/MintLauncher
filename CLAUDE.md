@@ -10,7 +10,7 @@
 - `./gradlew run` — запуск; в dev-режиме данные лежат в `./run` (`-Dmint.home`, см. `build.gradle.kts`).
 - `./gradlew packageExe` / `packageMsi` — установщик Windows (jpackage).
 - `java -jar … --headless <ник>` — служебный режим без UI: установить и запустить первую сборку офлайн (`Main.kt`).
-- Git-репозитория пока нет.
+- Git: приватный репозиторий https://github.com/GrayRK/MintLauncher, ветка `main`.
 
 ## Раскладка данных (`core/MintPaths.kt`)
 
