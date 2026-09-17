@@ -34,7 +34,7 @@ compose.desktop {
         nativeDistributions {
             targetFormats(TargetFormat.Exe, TargetFormat.Msi)
             packageName = "Mint"
-            packageVersion = "1.0.0"
+            packageVersion = version.toString()
             modules("java.instrument", "java.net.http", "jdk.crypto.ec", "jdk.management", "jdk.unsupported", "jdk.zipfs")
             windows {
                 menuGroup = "Mint"
