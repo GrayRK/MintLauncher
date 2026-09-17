@@ -68,7 +68,7 @@ private data class PackState(
 object Packs {
     /** Официальные сборки: появляются у игрока сразу после установки лаунчера. */
     val official = listOf(
-        PackSource("main", "GrayRK/MintPack-Main", "VanilaMint", "1.21.1", Loader.NEOFORGE),
+        PackSource("main", "GrayRK/VanillaMint", "VanillaMint", "1.21.1", Loader.NEOFORGE),
     )
 
     const val MANIFEST = "mint-pack.json"
