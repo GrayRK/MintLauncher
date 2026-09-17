@@ -68,7 +68,7 @@ private data class PackState(
 object Packs {
     /** Официальные сборки: появляются у игрока сразу после установки лаунчера. */
     val official = listOf(
-        PackSource("main", "GrayRK/VanillaMint", "VanillaMint", "1.21.1", Loader.NEOFORGE),
+        PackSource("vanillamint", "GrayRK/VanillaMint", "VanillaMint", "1.21.1", Loader.NEOFORGE),
     )
 
     const val MANIFEST = "mint-pack.json"
@@ -157,7 +157,7 @@ object Packs {
     }
 
     private fun reload(instance: Instance): Instance =
-        Instances.load(instance.dir)?.copy(id = instance.id) ?: instance
+        Instances.load(instance.dir) ?: instance
 
     private fun readManifest(file: File): PackManifest? =
         runCatching { MintJson.decodeFromString<PackManifest>(file.readText()) }.getOrNull()

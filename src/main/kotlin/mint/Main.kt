@@ -30,8 +30,8 @@ import java.awt.Dimension
 
 fun main(args: Array<String>) {
     if (args.firstOrNull() == "--headless") return headless(args.getOrElse(1) { "Steve" })
-    if (args.firstOrNull() == "--pack-manifest") return packManifest(args.getOrElse(1) { "main" })
-    if (args.firstOrNull() == "--pack-sync") return packSync(args.getOrElse(1) { "main" })
+    if (args.firstOrNull() == "--pack-manifest") return packManifest(args.getOrElse(1) { mint.game.Packs.official.first().id })
+    if (args.firstOrNull() == "--pack-sync") return packSync(args.getOrElse(1) { mint.game.Packs.official.first().id })
     gui()
 }
 
