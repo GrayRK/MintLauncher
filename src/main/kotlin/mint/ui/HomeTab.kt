@@ -23,7 +23,10 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -93,8 +96,12 @@ private fun Hero(app: AppState, modifier: Modifier) {
         }
 
         val launch = app.launch
-        if (app.settings.showConsole && app.consoleLines.isNotEmpty()) {
-            Console(app, Modifier.fillMaxWidth().padding(start = 26.dp, end = 26.dp, top = 22.dp, bottom = 130.dp).fillMaxHeight())
+        val consoleArea = Modifier.fillMaxWidth().padding(start = 26.dp, end = 26.dp, top = 22.dp, bottom = 130.dp).fillMaxHeight()
+        when {
+            // Сервер важнее: им управляют отсюда, а игра пишет в свой лог
+            app.server !is ServerState.Idle -> ServerConsole(app, consoleArea, onArt)
+            app.settings.showConsole && app.consoleLines.isNotEmpty() -> Console(app, consoleArea)
+            else -> {}
         }
 
         Row(
@@ -279,6 +286,61 @@ private fun Console(app: AppState, modifier: Modifier) {
         items(app.consoleLines) { line ->
             Txt(line, Mono.copy(fontSize = 10.5.sp, color = MintColors.ink(0.8f)), maxLines = 2)
         }
+    }
+}
+
+/**
+ * Консоль сервера с полем ввода: сюда пишут op, whitelist, weather и прочее.
+ * Появляется, как только сервер начал подниматься, и живёт до его остановки.
+ */
+@Composable
+private fun ServerConsole(app: AppState, modifier: Modifier, onArt: Boolean) {
+    val state = rememberLazyListState()
+    LaunchedEffect(app.serverLines.size) {
+        if (app.serverLines.isNotEmpty()) state.scrollToItem(app.serverLines.size - 1)
+    }
+    var command by remember { mutableStateOf("") }
+    val send = {
+        app.sendServerCommand(command)
+        command = ""
+    }
+
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+            Icon(MintIcon.Server, 13.dp, if (onArt) MintColors.OnArtAccent else MintColors.MintDeep)
+            Txt(
+                "Консоль сервера",
+                manrope(11.5f, FontWeight.SemiBold, if (onArt) MintColors.OnArt else MintColors.ink(0.85f)),
+            )
+        }
+        LazyColumn(
+            Modifier.weight(1f).fillMaxWidth().clip(RoundedCornerShape(12.dp))
+                .background(MintColors.Surface.copy(alpha = 0.9f)),
+            state = state,
+            contentPadding = PaddingValues(12.dp),
+        ) {
+            items(app.serverLines) { line ->
+                // Свои команды выделяем мятным — иначе теряются в потоке сервера
+                val own = line.startsWith("> ")
+                Txt(
+                    line,
+                    Mono.copy(
+                        fontSize = 10.5.sp,
+                        color = if (own) MintColors.MintDeep else MintColors.ink(0.8f),
+                    ),
+                    maxLines = 2,
+                )
+            }
+        }
+        val ready = app.serverAcceptsCommands
+        MintTextField(
+            value = command,
+            onValueChange = { command = it },
+            modifier = Modifier.fillMaxWidth(),
+            placeholder = if (ready) "Команда сервера: op Ник, whitelist add Ник, time set day…" else "Сервер ещё запускается…",
+            enabled = ready,
+            onSubmit = send,
+        )
     }
 }
 
