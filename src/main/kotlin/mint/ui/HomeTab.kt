@@ -23,10 +23,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -97,12 +94,8 @@ private fun Hero(app: AppState, modifier: Modifier) {
 
         val launch = app.launch
         val consoleArea = Modifier.fillMaxWidth().padding(start = 26.dp, end = 26.dp, top = 22.dp, bottom = 130.dp).fillMaxHeight()
-        when {
-            // Сервер важнее: им управляют отсюда, а игра пишет в свой лог
-            app.server !is ServerState.Idle -> ServerConsole(app, consoleArea, onArt)
-            app.settings.showConsole && app.consoleLines.isNotEmpty() -> Console(app, consoleArea)
-            else -> {}
-        }
+        // Консоль сервера живёт на своей вкладке — здесь только вывод игры
+        if (app.settings.showConsole && app.consoleLines.isNotEmpty()) Console(app, consoleArea)
 
         Row(
             Modifier.align(Alignment.BottomStart).fillMaxWidth().padding(start = 26.dp, end = 26.dp, bottom = 24.dp),
@@ -165,92 +158,51 @@ private fun rememberArt(file: java.io.File?): ImageBitmap? {
     }
 }
 
-/** Кнопка локального сервера: поднять сборку для друзей и остановить её. */
+/** Кнопка локального сервера: выключенный запускаем, запущенным управляем на его вкладке. */
 @Composable
 private fun ServerButton(app: AppState, onArt: Boolean) {
     val tint = if (onArt) MintColors.onArt(0.85f) else MintColors.ink(0.7f)
     val text = manrope(13.5f, FontWeight.SemiBold, if (onArt) MintColors.OnArt else MintColors.Ink)
-    when (app.server) {
-        is ServerState.Preparing -> OutlineButton(
-            "Отмена сервера", height = 52.dp, radius = 15.dp, onArt = onArt, textStyle = text,
-        ) { app.toggleServer() }
-        is ServerState.Running -> OutlineButton(
-            "Остановить", height = 52.dp, radius = 15.dp, onArt = onArt, textStyle = text,
-            leading = { Icon(MintIcon.Stop, 16.dp, tint) },
-        ) { app.toggleServer() }
-        is ServerState.Stopping -> OutlineButton(
-            "Остановка…", height = 52.dp, radius = 15.dp, enabled = false, onArt = onArt, textStyle = text,
-        ) {}
-        else -> OutlineButton(
-            "Сервер", height = 52.dp, radius = 15.dp, onArt = onArt, textStyle = text,
-            leading = { Icon(MintIcon.Server, 16.dp, tint) },
-        ) { app.toggleServer() }
-    }
+    val running = app.serverTabVisible
+    OutlineButton(
+        if (running) "Управление" else "Сервер",
+        height = 52.dp, radius = 15.dp, onArt = onArt, textStyle = text,
+        leading = { Icon(MintIcon.Server, 16.dp, tint) },
+    ) { if (running) app.tab = Tab.Server else app.toggleServer() }
 }
 
-/** Ход запуска сервера, его адрес и согласие с EULA. */
+/** Короткая строка о сервере: подробности, консоль и EULA живут на вкладке сервера. */
 @Composable
 private fun ServerStatus(app: AppState, onArt: Boolean) {
-    when (val state = app.server) {
-        is ServerState.Preparing -> Column(
-            Modifier.padding(top = 10.dp).widthIn(max = 420.dp),
-            verticalArrangement = Arrangement.spacedBy(7.dp),
-        ) {
-            Txt(state.stage, manrope(11.5f, color = if (onArt) MintColors.onArt(0.9f) else MintColors.ink(0.85f)), maxLines = 1)
-            ProgressBar(
-                state.fraction, Modifier.fillMaxWidth(),
-                track = if (onArt) MintColors.onArt(0.22f) else MintColors.ink(0.08f),
-            )
+    val state = app.server
+    if (state is ServerState.Idle) return
+    val soft = if (onArt) MintColors.onArt(0.9f) else MintColors.ink(0.85f)
+    val accent = if (onArt) MintColors.OnArtAccent else MintColors.MintDeep
+    Row(
+        Modifier.padding(top = 10.dp).widthIn(max = 560.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        val danger = if (onArt) MintColors.OnArtDanger else MintColors.Danger
+        val failed = state is ServerState.Failed
+        Icon(if (failed) MintIcon.Warning else MintIcon.Server, 14.dp, if (failed) danger else accent)
+        val label = when (state) {
+            is ServerState.Preparing -> state.stage
+            is ServerState.Running -> when {
+                !state.ready -> "Сервер загружает мир…"
+                state.tunnel -> "Сервер работает · друзьям: ${mint.game.ServerLauncher.TUNNEL_HUB}"
+                else -> "Сервер работает · localhost:${mint.game.ServerLauncher.DEFAULT_PORT}"
+            }
+            is ServerState.Stopping -> "Сервер выключается…"
+            is ServerState.Failed -> state.message
+            ServerState.Idle -> ""
         }
-
-        is ServerState.Running -> Row(
-            Modifier.padding(top = 10.dp).widthIn(max = 520.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Icon(MintIcon.Server, 14.dp, if (onArt) MintColors.OnArtAccent else MintColors.MintDeep)
-            val hub = mint.game.ServerLauncher.TUNNEL_HUB
-            val label = when {
-                !state.ready -> "Сервер загружается…"
-                // Туннель не выдаёт свой адрес: друзья заходят на хаб и выбирают сервер по названию
-                state.tunnel -> "Сервер работает · друзьям: $hub, там выбрать «${app.selectedInstance.name}»"
-                else -> "Сервер работает · localhost:${mint.game.ServerLauncher.DEFAULT_PORT} · туннель не поднялся"
-            }
-            Txt(label, manrope(11.5f, color = if (onArt) MintColors.onArt(0.9f) else MintColors.ink(0.85f)), maxLines = 1)
-            if (state.ready) {
-                val copied = if (state.tunnel) hub else "localhost:${mint.game.ServerLauncher.DEFAULT_PORT}"
-                LinkText("копировать") { copyToClipboard(copied) }
-            }
-        }
-
-        is ServerState.Stopping -> Txt(
-            "Сервер сохраняет мир и выключается…",
-            manrope(11.5f, color = if (onArt) MintColors.onArt(0.9f) else MintColors.ink(0.85f)),
-            Modifier.padding(top = 10.dp),
-        )
-
-        is ServerState.Failed -> Column(
-            Modifier.padding(top = 10.dp).widthIn(max = 520.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.Top) {
-                val danger = if (onArt) MintColors.OnArtDanger else MintColors.Danger
-                Icon(MintIcon.Warning, 14.dp, danger)
-                Txt(state.message, manrope(11.5f, color = danger), maxLines = 3)
-            }
-            if (!app.settings.eulaAccepted) {
-                LinkText("Принимаю EULA Minecraft и запускаю сервер") {
-                    app.acceptEula()
-                    app.toggleServer()
-                }
-            }
-        }
-
-        ServerState.Idle -> {}
+        Txt(label, manrope(11.5f, color = if (failed) danger else soft), maxLines = 1)
+        LinkText("подробнее", manrope(11.5f, color = accent)) { app.tab = Tab.Server }
     }
 }
 
-private fun copyToClipboard(text: String) = runCatching {
+fun copyToClipboard(text: String) = runCatching {
     java.awt.Toolkit.getDefaultToolkit().systemClipboard
         .setContents(java.awt.datatransfer.StringSelection(text), null)
 }
@@ -289,61 +241,6 @@ private fun Console(app: AppState, modifier: Modifier) {
     }
 }
 
-/**
- * Консоль сервера с полем ввода: сюда пишут op, whitelist, weather и прочее.
- * Появляется, как только сервер начал подниматься, и живёт до его остановки.
- */
-@Composable
-private fun ServerConsole(app: AppState, modifier: Modifier, onArt: Boolean) {
-    val state = rememberLazyListState()
-    LaunchedEffect(app.serverLines.size) {
-        if (app.serverLines.isNotEmpty()) state.scrollToItem(app.serverLines.size - 1)
-    }
-    var command by remember { mutableStateOf("") }
-    val send = {
-        app.sendServerCommand(command)
-        command = ""
-    }
-
-    Column(modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-            Icon(MintIcon.Server, 13.dp, if (onArt) MintColors.OnArtAccent else MintColors.MintDeep)
-            Txt(
-                "Консоль сервера",
-                manrope(11.5f, FontWeight.SemiBold, if (onArt) MintColors.OnArt else MintColors.ink(0.85f)),
-            )
-        }
-        LazyColumn(
-            Modifier.weight(1f).fillMaxWidth().clip(RoundedCornerShape(12.dp))
-                .background(MintColors.Surface.copy(alpha = 0.9f)),
-            state = state,
-            contentPadding = PaddingValues(12.dp),
-        ) {
-            items(app.serverLines) { line ->
-                // Свои команды выделяем мятным — иначе теряются в потоке сервера
-                val own = line.startsWith("> ")
-                Txt(
-                    line,
-                    Mono.copy(
-                        fontSize = 10.5.sp,
-                        color = if (own) MintColors.MintDeep else MintColors.ink(0.8f),
-                    ),
-                    maxLines = 2,
-                )
-            }
-        }
-        val ready = app.serverAcceptsCommands
-        MintTextField(
-            value = command,
-            onValueChange = { command = it },
-            modifier = Modifier.fillMaxWidth(),
-            placeholder = if (ready) "Команда сервера: op Ник, whitelist add Ник, time set day…" else "Сервер ещё запускается…",
-            enabled = ready,
-            onSubmit = send,
-        )
-    }
-}
-
 @Composable
 private fun InstancesCard(app: AppState, modifier: Modifier) {
     Card(modifier, radius = 15.dp, padding = PaddingValues(horizontal = 16.dp, vertical = 15.dp), spacing = 11.dp) {
@@ -379,9 +276,9 @@ private fun NewsCard(modifier: Modifier) {
     Card(modifier, radius = 15.dp, padding = PaddingValues(horizontal = 16.dp, vertical = 15.dp), spacing = 9.dp) {
         Txt("Что нового", manrope(12.5f, FontWeight.SemiBold))
         Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-            Txt("Mint 0.2.2 — сборка CreateMint и свой сервер", manrope(12f, FontWeight.SemiBold, MintColors.ink(0.85f)))
+            Txt("Mint 0.2.3 — вкладка сервера и MineColonies", manrope(12f, FontWeight.SemiBold, MintColors.ink(0.85f)))
             Txt(
-                "Сборка ставится сама, а кнопка «Сервер» поднимает мир для друзей — без проброса портов.",
+                "У запущенного сервера теперь своя вкладка с консолью, а в CreateMint приехал MineColonies.",
                 manrope(11.5f, FontWeight.Normal, MintColors.ink(0.78f), lineHeight = 16.7.sp),
                 maxLines = 3,
             )

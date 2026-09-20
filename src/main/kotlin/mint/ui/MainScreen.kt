@@ -34,6 +34,7 @@ fun FrameWindowScope.MainScreen(app: AppState, actions: WindowActions) {
             Box(Modifier.weight(1f).fillMaxHeight()) {
                 when (app.tab) {
                     Tab.Home, Tab.Instances, Tab.Mods -> HomeTab(app)
+                    Tab.Server -> ServerTab(app)
                     Tab.Account -> AccountTab(app)
                     Tab.Settings -> SettingsTab(app)
                 }
@@ -73,6 +74,8 @@ private fun SideDock(app: AppState) {
             // Сборки и моды появятся позже
             DockButton(MintIcon.Cube, app.tab == Tab.Instances) { }
             DockButton(MintIcon.Puzzle, app.tab == Tab.Mods) { }
+            // Сервер есть в доке, только пока он запущен: выключенному серверу там делать нечего
+            if (app.serverTabVisible) DockButton(MintIcon.Server, app.tab == Tab.Server) { app.tab = Tab.Server }
             DockButton(MintIcon.UserCircle, app.tab == Tab.Account) { app.tab = Tab.Account }
             Spacer()
             DockButton(MintIcon.Gear, app.tab == Tab.Settings) { app.tab = Tab.Settings }
