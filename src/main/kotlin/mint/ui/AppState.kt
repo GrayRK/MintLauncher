@@ -30,8 +30,8 @@ import java.io.File
 
 enum class Screen { Login, Main }
 
-/** Вкладки боковой панели. */
-enum class Tab { Home, Instances, Mods, Account, Settings }
+/** Вкладки боковой панели. Server появляется в доке, только пока сервер не остановлен. */
+enum class Tab { Home, Instances, Mods, Server, Account, Settings }
 
 sealed interface LaunchState {
     data object Idle : LaunchState
@@ -209,6 +209,15 @@ class AppState(private val scope: CoroutineScope, private val onHideWindow: (Boo
         if (command == "stop") server = ServerState.Stopping
     }
 
+    /** Вкладка сервера видна в доке, пока сервер запускается, работает или упал с ошибкой. */
+    val serverTabVisible get() = server !is ServerState.Idle
+
+    /** Сервер остановлен: вкладка исчезает из дока, уводим с неё на главную. */
+    private fun serverIdle() {
+        server = ServerState.Idle
+        if (tab == Tab.Server) tab = Tab.Home
+    }
+
     fun toggleServer() {
         when (server) {
             is ServerState.Running -> stopServer()
@@ -218,17 +227,19 @@ class AppState(private val scope: CoroutineScope, private val onHideWindow: (Boo
     }
 
     private fun stopServer() {
-        val handle = serverHandle ?: run { server = ServerState.Idle; return }
+        val handle = serverHandle ?: run { serverIdle(); return }
         server = ServerState.Stopping
         scope.launch(Dispatchers.IO) { handle.stop() }
     }
 
     private fun startServer() {
         if (!settings.eulaAccepted) {
+            tab = Tab.Server
             server = ServerState.Failed("Нужно принять EULA Minecraft")
             return
         }
         serverLines.clear()
+        tab = Tab.Server
         serverJob = scope.launch {
             try {
                 val progress = mint.game.ProgressSink { stage, fraction ->
@@ -259,14 +270,14 @@ class AppState(private val scope: CoroutineScope, private val onHideWindow: (Boo
                     onExit = { code ->
                         scope.launch(Dispatchers.Main) {
                             serverHandle = null
-                            server = if (code == 0) ServerState.Idle
-                            else ServerState.Failed("Сервер завершился с кодом $code. Лог: data/logs/server-latest.log")
+                            if (code == 0) serverIdle()
+                            else server = ServerState.Failed("Сервер завершился с кодом $code. Лог: data/logs/server-latest.log")
                         }
                     },
                 )
                 withContext(Dispatchers.Main) { server = ServerState.Running(tunnel = false, ready = false) }
             } catch (e: CancellationException) {
-                server = ServerState.Idle
+                serverIdle()
             } catch (e: Exception) {
                 e.printStackTrace()
                 server = ServerState.Failed(e.message ?: e.toString())
