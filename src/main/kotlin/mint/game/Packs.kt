@@ -98,8 +98,11 @@ object Packs {
     const val MANIFEST = "mint-pack.json"
     private const val STATE = ".mint-pack.json"
 
-    /** Файлы репозитория, которые не копируются в папку сборки. */
-    private val repoOnly = setOf(MANIFEST, ".gitignore", ".gitattributes", "README.md", "LICENSE")
+    /**
+     * Файлы репозитория, которые не копируются в папку сборки.
+     * Манифест копируется: по нему локальный сервер понимает, какие моды ему нужны.
+     */
+    private val repoOnly = setOf(".gitignore", ".gitattributes", "README.md", "LICENSE")
 
     fun sourceFor(instance: Instance): String? =
         instance.repo.ifBlank { null } ?: official.firstOrNull { it.id == instance.id }?.repo
@@ -187,9 +190,18 @@ object Packs {
     private fun readManifest(file: File): PackManifest? =
         runCatching { MintJson.decodeFromString<PackManifest>(file.readText()) }.getOrNull()
 
-    /** Манифест сборки; пустой, если его нет (локальная сборка без раздачи). */
-    fun manifest(instance: Instance): PackManifest =
-        readManifest(File(instance.dir, MANIFEST)) ?: PackManifest()
+    /**
+     * Манифест сборки. У разработчика он лежит в папке сборки, а у игрока, который
+     * ставил сборку старым лаунчером, — только внутри .mint-pack.json. Читаем оба места,
+     * иначе сторона модов неизвестна и на сервер уезжает клиентский Sodium.
+     */
+    fun manifest(instance: Instance): PackManifest {
+        readManifest(File(instance.dir, MANIFEST))?.let { if (it.files.isNotEmpty()) return it }
+        val state = runCatching {
+            MintJson.decodeFromString<PackState>(File(instance.dir, STATE).readText())
+        }.getOrNull()
+        return PackManifest(state?.external.orEmpty())
+    }
 
     /** Архив GitHub содержит корневую папку <repo>-<tag>/ — её отбрасываем. */
     private fun unzipStripRoot(zip: File, target: File) {
