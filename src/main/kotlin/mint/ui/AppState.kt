@@ -193,6 +193,22 @@ class AppState(private val scope: CoroutineScope, private val onHideWindow: (Boo
 
     fun acceptEula() = updateSettings { it.copy(eulaAccepted = true) }
 
+    /** Сервер запущен и принимает команды. */
+    val serverAcceptsCommands get() = server is ServerState.Running && serverHandle != null
+
+    /**
+     * Отправляет команду в консоль сервера. Эхо пишем сами: сервер печатает только
+     * результат, и без него непонятно, что именно было введено.
+     */
+    fun sendServerCommand(line: String) {
+        val command = line.trim().removePrefix("/")
+        if (command.isEmpty()) return
+        val handle = serverHandle ?: return
+        serverLines += "> $command"
+        scope.launch(Dispatchers.IO) { handle.command(command) }
+        if (command == "stop") server = ServerState.Stopping
+    }
+
     fun toggleServer() {
         when (server) {
             is ServerState.Running -> stopServer()
