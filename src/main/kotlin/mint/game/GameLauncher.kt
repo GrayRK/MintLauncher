@@ -14,7 +14,7 @@ import kotlin.concurrent.thread
 
 object GameLauncher {
     const val LAUNCHER_NAME = "Mint"
-    const val LAUNCHER_VERSION = "0.2.1"
+    const val LAUNCHER_VERSION = "0.2.2"
 
     suspend fun resolveJava(settings: LauncherSettings, progress: ProgressSink): JavaInfo =
         if (settings.javaAuto) {

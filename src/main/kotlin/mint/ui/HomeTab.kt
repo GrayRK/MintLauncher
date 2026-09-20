@@ -379,7 +379,7 @@ private fun NewsCard(modifier: Modifier) {
     Card(modifier, radius = 15.dp, padding = PaddingValues(horizontal = 16.dp, vertical = 15.dp), spacing = 9.dp) {
         Txt("Что нового", manrope(12.5f, FontWeight.SemiBold))
         Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-            Txt("Mint 0.2 — сборка CreateMint и свой сервер", manrope(12f, FontWeight.SemiBold, MintColors.ink(0.85f)))
+            Txt("Mint 0.2.2 — сборка CreateMint и свой сервер", manrope(12f, FontWeight.SemiBold, MintColors.ink(0.85f)))
             Txt(
                 "Сборка ставится сама, а кнопка «Сервер» поднимает мир для друзей — без проброса портов.",
                 manrope(11.5f, FontWeight.Normal, MintColors.ink(0.78f), lineHeight = 16.7.sp),
