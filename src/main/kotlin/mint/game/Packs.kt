@@ -41,6 +41,19 @@ data class PackSource(
     val loader: Loader,
 )
 
+/** Сторона, которой нужен файл сборки. */
+@Serializable
+enum class PackSide {
+    /** Нужен и клиенту, и серверу: мод с мировой логикой, библиотека, общий конфиг. */
+    BOTH,
+
+    /** Только клиенту: интерфейс, звуки, шейдеры, клиентские оптимизации. */
+    CLIENT,
+
+    /** Только серверу: то, чего в клиентской папке mods/ вообще быть не должно. */
+    SERVER,
+}
+
 /** mint-pack.json в репозитории сборки. */
 @Serializable
 data class PackManifest(val files: List<PackFile> = emptyList())
@@ -52,7 +65,12 @@ data class PackFile(
     val url: String,
     val sha1: String,
     val size: Long = -1,
-)
+    /** Кому нужен файл. Правится вручную и переживает пересборку манифеста. */
+    val side: PackSide = PackSide.BOTH,
+) {
+    val forClient get() = side != PackSide.SERVER
+    val forServer get() = side != PackSide.CLIENT
+}
 
 /** .mint-pack.json в папке сборки: что и из какого релиза установлено. */
 @Serializable
@@ -66,11 +84,16 @@ private data class PackState(
 )
 
 object Packs {
-    /**
-     * Официальные сборки: появляются у игрока сразу после установки лаунчера.
-     * Пока пусто — раздача сборок через GitHub отложена, сборки только локальные.
-     */
-    val official = emptyList<PackSource>()
+    /** Официальные сборки: появляются у игрока сразу после установки лаунчера. */
+    val official = listOf(
+        PackSource(
+            id = "createmint",
+            repo = "GrayRK/CreateMint",
+            name = "CreateMint",
+            minecraft = "1.21.1",
+            loader = Loader.NEOFORGE,
+        ),
+    )
 
     const val MANIFEST = "mint-pack.json"
     private const val STATE = ".mint-pack.json"
@@ -135,7 +158,7 @@ object Packs {
             target.parentFile.mkdirs()
             src.copyTo(target, overwrite = true)
         }
-        manifest.files.forEach { newFiles[it.path] = it.sha1.lowercase() }
+        manifest.files.filter { it.forClient }.forEach { newFiles[it.path] = it.sha1.lowercase() }
 
         // Убираем то, что сборка больше не содержит (если игрок это не менял)
         (oldFiles.keys - newFiles.keys).forEach { path ->
@@ -150,8 +173,9 @@ object Packs {
     }
 
     private suspend fun downloadExternal(dir: File, manifest: PackManifest, progress: ProgressSink) {
-        if (manifest.files.isEmpty()) return
-        val tasks = manifest.files.map { DownloadTask(it.url, File(dir, it.path), it.sha1, it.size) }
+        val files = manifest.files.filter { it.forClient }
+        if (files.isEmpty()) return
+        val tasks = files.map { DownloadTask(it.url, File(dir, it.path), it.sha1, it.size) }
         Http.downloadAll(tasks) { done, total ->
             progress.report("Файлы сборки $done/$total", if (total == 0) 1f else done.toFloat() / total)
         }
@@ -162,6 +186,10 @@ object Packs {
 
     private fun readManifest(file: File): PackManifest? =
         runCatching { MintJson.decodeFromString<PackManifest>(file.readText()) }.getOrNull()
+
+    /** Манифест сборки; пустой, если его нет (локальная сборка без раздачи). */
+    fun manifest(instance: Instance): PackManifest =
+        readManifest(File(instance.dir, MANIFEST)) ?: PackManifest()
 
     /** Архив GitHub содержит корневую папку <repo>-<tag>/ — её отбрасываем. */
     private fun unzipStripRoot(zip: File, target: File) {
@@ -206,16 +234,27 @@ object Packs {
         for (file in local) {
             val path = file.relativeTo(dir).invariantSeparatorsPath
             val hash = hashes.getValue(file)
-            val url = previous[hash]?.url ?: modrinth[hash]
-            if (url == null) missing += path else entries += PackFile(path, url, hash, file.length())
+            val known = previous[hash]
+            val url = known?.url ?: modrinth[hash]?.url
+            if (url == null) {
+                missing += path
+                continue
+            }
+            // Сторона, выставленная вручную, важнее подсказки Modrinth: там почти всё «optional»
+            val side = known?.side ?: modrinth[hash]?.side ?: PackSide.BOTH
+            entries += PackFile(path, url, hash, file.length(), side)
         }
+        // Серверные файлы (их нет в mods/ клиента) переносим из прошлого манифеста как есть
+        entries += previous.values.filter { it.side == PackSide.SERVER && entries.none { e -> e.path == it.path } }
 
         manifestFile.writeText(MintJson.encodeToString(PackManifest.serializer(), PackManifest(entries)) + "\n")
         missing
     }
 
-    /** sha1 → прямая ссылка на файл в Modrinth CDN. */
-    private suspend fun lookupModrinth(hashes: List<String>): Map<String, String> {
+    private data class ModrinthFile(val url: String, val side: PackSide)
+
+    /** sha1 → ссылка на файл в Modrinth CDN и сторона по метаданным проекта. */
+    private suspend fun lookupModrinth(hashes: List<String>): Map<String, ModrinthFile> {
         if (hashes.isEmpty()) return emptyMap()
         val body = buildJsonObject {
             put("hashes", buildJsonArray { hashes.forEach { add(kotlinx.serialization.json.JsonPrimitive(it)) } })
@@ -224,12 +263,42 @@ object Packs {
         val (code, text) = Http.postJson("https://api.modrinth.com/v2/version_files", body.toString())
         if (code !in 200..299) throw IOException("Modrinth ответил HTTP $code")
         val result = MintJson.parseToJsonElement(text).jsonObject
-        return hashes.mapNotNull { hash ->
-            val version = result[hash] as? JsonObject ?: return@mapNotNull null
+
+        val urls = linkedMapOf<String, String>()
+        val projectOf = linkedMapOf<String, String>()
+        for (hash in hashes) {
+            val version = result[hash] as? JsonObject ?: continue
             val file = version["files"]!!.jsonArray.map { it.jsonObject }
                 .firstOrNull { it["hashes"]?.jsonObject?.get("sha1")?.jsonPrimitive?.content == hash }
-                ?: return@mapNotNull null
-            hash to file["url"]!!.jsonPrimitive.content
+                ?: continue
+            urls[hash] = file["url"]!!.jsonPrimitive.content
+            version["project_id"]?.jsonPrimitive?.content?.let { projectOf[hash] = it }
+        }
+
+        val sides = projectSides(projectOf.values.distinct())
+        return urls.mapValues { (hash, url) ->
+            ModrinthFile(url, sides[projectOf[hash]] ?: PackSide.BOTH)
+        }
+    }
+
+    /** id проекта → сторона. Modrinth почти всё помечает «optional», поэтому ловим только явный «unsupported». */
+    private suspend fun projectSides(ids: List<String>): Map<String, PackSide> {
+        if (ids.isEmpty()) return emptyMap()
+        val query = ids.joinToString(",", "[", "]") { "\"$it\"" }
+        val text = runCatching {
+            Http.getString("https://api.modrinth.com/v2/projects?ids=" + java.net.URLEncoder.encode(query, "UTF-8"))
+        }.getOrElse { return emptyMap() }
+        return MintJson.parseToJsonElement(text).jsonArray.mapNotNull { element ->
+            val project = element.jsonObject
+            val id = project["id"]?.jsonPrimitive?.content ?: return@mapNotNull null
+            val client = project["client_side"]?.jsonPrimitive?.content
+            val server = project["server_side"]?.jsonPrimitive?.content
+            val side = when {
+                server == "unsupported" && client != "unsupported" -> PackSide.CLIENT
+                client == "unsupported" && server != "unsupported" -> PackSide.SERVER
+                else -> PackSide.BOTH
+            }
+            id to side
         }.toMap()
     }
 }

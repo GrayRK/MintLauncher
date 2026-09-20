@@ -37,11 +37,18 @@ object NeoForgeInstaller {
 
     fun isInstalled(version: String) = markerFile(version).isFile && Versions.jsonFile("neoforge-$version").isFile
 
-    suspend fun install(minecraft: String, version: String, java: JavaInfo, progress: ProgressSink) {
-        if (isInstalled(version)) return
+    /** Официальный инсталлер NeoForge: нужен и клиенту (процессоры), и серверу (--installServer). */
+    suspend fun installerJar(version: String, progress: ProgressSink): File {
         val installer = File(MintPaths.cache, "neoforge-$version-installer.jar")
+        if (installer.isFile) return installer
         progress.report("Загрузка NeoForge $version", null)
         Http.download(DownloadTask("$MAVEN/net/neoforged/neoforge/$version/neoforge-$version-installer.jar", installer))
+        return installer
+    }
+
+    suspend fun install(minecraft: String, version: String, java: JavaInfo, progress: ProgressSink) {
+        if (isInstalled(version)) return
+        val installer = installerJar(version, progress)
 
         val (profile, versionJson) = withContext(Dispatchers.IO) {
             ZipFile(installer).use { zip ->

@@ -23,6 +23,10 @@ enum class Theme { LIGHT, DARK, SYSTEM }
 data class LauncherSettings(
     val theme: Theme = Theme.LIGHT,
     val memoryMb: Int = 6144,
+    /** Память локального сервера сборки. */
+    val serverMemoryMb: Int = 4096,
+    /** EULA Minecraft принимает игрок — без этого локальный сервер не поднимается. */
+    val eulaAccepted: Boolean = false,
     val javaAuto: Boolean = true,
     val javaPath: String = "",
     val closeOnLaunch: Boolean = false,

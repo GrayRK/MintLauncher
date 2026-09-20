@@ -94,22 +94,110 @@ private fun Hero(app: AppState, modifier: Modifier) {
                     }
                     else -> {}
                 }
+                ServerStatus(app)
             }
-            when (launch) {
-                is LaunchState.Preparing -> OutlineButton("Отмена", height = 52.dp, radius = 15.dp) { app.cancelLaunch() }
-                is LaunchState.Running -> PrimaryButton(
-                    "В игре", height = 52.dp, radius = 15.dp, enabled = false,
-                    textStyle = nunito(18f, color = MintColors.MintInk),
-                ) {}
-                else -> PrimaryButton(
-                    if (launch is LaunchState.Failed) "Повторить" else "Играть",
-                    height = 52.dp, radius = 15.dp,
-                    textStyle = nunito(18f, color = MintColors.MintInk),
-                    leading = { Icon(if (launch is LaunchState.Failed) MintIcon.Refresh else MintIcon.Play, 18.dp, MintColors.MintDarker) },
-                ) { app.play() }
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.Bottom) {
+                ServerButton(app)
+                when (launch) {
+                    is LaunchState.Preparing -> OutlineButton("Отмена", height = 52.dp, radius = 15.dp) { app.cancelLaunch() }
+                    is LaunchState.Running -> PrimaryButton(
+                        "В игре", height = 52.dp, radius = 15.dp, enabled = false,
+                        textStyle = nunito(18f, color = MintColors.MintInk),
+                    ) {}
+                    else -> PrimaryButton(
+                        if (launch is LaunchState.Failed) "Повторить" else "Играть",
+                        height = 52.dp, radius = 15.dp,
+                        textStyle = nunito(18f, color = MintColors.MintInk),
+                        leading = { Icon(if (launch is LaunchState.Failed) MintIcon.Refresh else MintIcon.Play, 18.dp, MintColors.MintDarker) },
+                    ) { app.play() }
+                }
             }
         }
     }
+}
+
+/** Кнопка локального сервера: поднять сборку для друзей и остановить её. */
+@Composable
+private fun ServerButton(app: AppState) {
+    when (val state = app.server) {
+        is ServerState.Preparing -> OutlineButton(
+            "Отмена сервера", height = 52.dp, radius = 15.dp,
+        ) { app.toggleServer() }
+        is ServerState.Running -> OutlineButton(
+            "Остановить", height = 52.dp, radius = 15.dp,
+            leading = { Icon(MintIcon.Stop, 16.dp, MintColors.ink(0.7f)) },
+        ) { app.toggleServer() }
+        is ServerState.Stopping -> OutlineButton(
+            "Остановка…", height = 52.dp, radius = 15.dp, enabled = false,
+        ) {}
+        else -> OutlineButton(
+            "Сервер", height = 52.dp, radius = 15.dp,
+            leading = { Icon(MintIcon.Server, 16.dp, MintColors.ink(0.7f)) },
+        ) { app.toggleServer() }
+    }
+}
+
+/** Ход запуска сервера, его адрес и согласие с EULA. */
+@Composable
+private fun ServerStatus(app: AppState) {
+    when (val state = app.server) {
+        is ServerState.Preparing -> Column(
+            Modifier.padding(top = 10.dp).widthIn(max = 420.dp),
+            verticalArrangement = Arrangement.spacedBy(7.dp),
+        ) {
+            Txt(state.stage, manrope(11.5f, color = MintColors.ink(0.85f)), maxLines = 1)
+            ProgressBar(state.fraction, Modifier.fillMaxWidth())
+        }
+
+        is ServerState.Running -> Row(
+            Modifier.padding(top = 10.dp).widthIn(max = 520.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(MintIcon.Server, 14.dp, MintColors.MintDeep)
+            val hub = mint.game.ServerLauncher.TUNNEL_HUB
+            val label = when {
+                !state.ready -> "Сервер загружается…"
+                // Туннель не выдаёт свой адрес: друзья заходят на хаб и выбирают сервер по названию
+                state.tunnel -> "Сервер работает · друзьям: $hub, там выбрать «${app.selectedInstance.name}»"
+                else -> "Сервер работает · localhost:${mint.game.ServerLauncher.DEFAULT_PORT} · туннель не поднялся"
+            }
+            Txt(label, manrope(11.5f, color = MintColors.ink(0.85f)), maxLines = 1)
+            if (state.ready) {
+                val copied = if (state.tunnel) hub else "localhost:${mint.game.ServerLauncher.DEFAULT_PORT}"
+                LinkText("копировать") { copyToClipboard(copied) }
+            }
+        }
+
+        is ServerState.Stopping -> Txt(
+            "Сервер сохраняет мир и выключается…",
+            manrope(11.5f, color = MintColors.ink(0.85f)),
+            Modifier.padding(top = 10.dp),
+        )
+
+        is ServerState.Failed -> Column(
+            Modifier.padding(top = 10.dp).widthIn(max = 520.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.Top) {
+                Icon(MintIcon.Warning, 14.dp, MintColors.Danger)
+                Txt(state.message, manrope(11.5f, color = MintColors.Danger), maxLines = 3)
+            }
+            if (!app.settings.eulaAccepted) {
+                LinkText("Принимаю EULA Minecraft и запускаю сервер") {
+                    app.acceptEula()
+                    app.toggleServer()
+                }
+            }
+        }
+
+        ServerState.Idle -> {}
+    }
+}
+
+private fun copyToClipboard(text: String) = runCatching {
+    java.awt.Toolkit.getDefaultToolkit().systemClipboard
+        .setContents(java.awt.datatransfer.StringSelection(text), null)
 }
 
 @Composable
@@ -181,9 +269,9 @@ private fun NewsCard(modifier: Modifier) {
     Card(modifier, radius = 15.dp, padding = PaddingValues(horizontal = 16.dp, vertical = 15.dp), spacing = 9.dp) {
         Txt("Что нового", manrope(12.5f, FontWeight.SemiBold))
         Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-            Txt("Mint 0.1 — первый запуск", manrope(12f, FontWeight.SemiBold, MintColors.ink(0.85f)))
+            Txt("Mint 0.2 — сборка CreateMint и свой сервер", manrope(12f, FontWeight.SemiBold, MintColors.ink(0.85f)))
             Txt(
-                "Minecraft 1.21.1 с NeoForge, вход через Ely.by и автоматическая установка Java 21.",
+                "Сборка ставится сама, а кнопка «Сервер» поднимает мир для друзей — без проброса портов.",
                 manrope(11.5f, FontWeight.Normal, MintColors.ink(0.78f), lineHeight = 16.7.sp),
                 maxLines = 3,
             )

@@ -54,10 +54,11 @@ private fun pluralMods(n: Int): String {
 
 object Instances {
     private val default = Instance(
-        id = "vanillamint",
-        name = "VanillaMint",
+        id = "createmint",
+        name = "CreateMint",
         minecraft = "1.21.1",
         loader = Loader.NEOFORGE,
+        repo = "GrayRK/CreateMint",
     )
 
     fun all(): List<Instance> {
