@@ -44,8 +44,8 @@ sealed interface ServerState {
     data object Idle : ServerState
     data class Preparing(val stage: String, val fraction: Float?) : ServerState
 
-    /** Сервер работает; [tunnel] — поднялся ли ProximaTunnel для друзей извне. */
-    data class Running(val tunnel: Boolean, val ready: Boolean) : ServerState
+    /** Сервер работает; [ready] — мир загружен и пускает игроков. */
+    data class Running(val ready: Boolean) : ServerState
     data object Stopping : ServerState
     data class Failed(val message: String) : ServerState
 }
@@ -260,10 +260,8 @@ class AppState(private val scope: CoroutineScope, private val onHideWindow: (Boo
                             serverLines += line
                             if (serverLines.size > 2000) serverLines.removeRange(0, serverLines.size - 2000)
                             val current = server as? ServerState.Running ?: return@launch
-                            val tunnel = current.tunnel || mint.game.ServerLauncher.isTunnelUp(line)
-                            val ready = current.ready || mint.game.ServerLauncher.isReady(line)
-                            if (tunnel != current.tunnel || ready != current.ready) {
-                                server = ServerState.Running(tunnel, ready)
+                            if (!current.ready && mint.game.ServerLauncher.isReady(line)) {
+                                server = ServerState.Running(ready = true)
                             }
                         }
                     },
@@ -275,7 +273,7 @@ class AppState(private val scope: CoroutineScope, private val onHideWindow: (Boo
                         }
                     },
                 )
-                withContext(Dispatchers.Main) { server = ServerState.Running(tunnel = false, ready = false) }
+                withContext(Dispatchers.Main) { server = ServerState.Running(ready = false) }
             } catch (e: CancellationException) {
                 serverIdle()
             } catch (e: Exception) {

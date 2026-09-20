@@ -72,6 +72,33 @@ private fun Head(app: AppState) {
             PowerButton(app)
         }
         Status(app)
+        WorldWarning(app)
+    }
+}
+
+/**
+ * Пресет генерации попадает в мир только при его создании. Если мир сервера создан раньше
+ * (или до того, как сборка начала возить пресет), рельеф в нём ванильный — и это уже не починить,
+ * нужен новый мир. Молчать об этом нельзя: снаружи выглядит как «сборка не работает».
+ */
+@Composable
+private fun WorldWarning(app: AppState) {
+    val instance = app.selectedInstance
+    val stale = remember(instance.id, app.server) { ServerLauncher.worldMissesDatapacks(instance) }
+    if (!stale) return
+    Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.Top) {
+        Icon(MintIcon.Warning, 14.dp, MintColors.Danger)
+        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Txt(
+                "Мир сервера создан без пресета генерации — рельеф в нём ванильный, без ReTerraForged.",
+                manrope(11.5f, color = MintColors.Danger),
+            )
+            Txt(
+                "Генератор записывается в мир при создании и потом не меняется. Чтобы получить рельеф сборки, " +
+                    "удалите папку server/world — при следующем запуске мир создастся заново.",
+                manrope(11.5f, color = MintColors.ink(0.7f)),
+            )
+        }
     }
 }
 
@@ -106,16 +133,12 @@ private fun Status(app: AppState) {
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Dot(if (state.ready) MintColors.MintDeep else MintColors.ink(0.35f))
-            val hub = ServerLauncher.TUNNEL_HUB
-            val local = "localhost:${ServerLauncher.DEFAULT_PORT}"
-            val label = when {
-                !state.ready -> "Сервер загружает мир…"
-                // Туннель не выдаёт свой адрес: друзья заходят на хаб и выбирают сервер по названию
-                state.tunnel -> "Сервер работает · друзьям: $hub, там выбрать «${app.selectedInstance.name}»"
-                else -> "Сервер работает · $local · туннель не поднялся"
-            }
+            val address = ServerLauncher.lanAddress(app.selectedInstance)
+            val label =
+                if (state.ready) "Сервер работает · в локальной сети: $address"
+                else "Сервер загружает мир…"
             Txt(label, manrope(11.5f, color = MintColors.ink(0.85f)), maxLines = 1)
-            if (state.ready) LinkText("копировать") { copyToClipboard(if (state.tunnel) hub else local) }
+            if (state.ready) LinkText("копировать") { copyToClipboard(address) }
         }
 
         is ServerState.Stopping -> Row(

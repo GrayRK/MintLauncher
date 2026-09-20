@@ -2,6 +2,8 @@ package mint.game
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import mint.auth.AuthlibInjector
+import mint.core.AccountType
 import mint.core.DownloadTask
 import mint.core.Http
 import mint.core.LauncherSettings
@@ -81,11 +83,20 @@ object ServerLauncher {
             markerFile(instance).writeText(instance.loaderVersion)
         }
 
+        // Сервер логинит игроков через Ely.by: без этого у профилей нет текстур и все ходят Стивами
+        val agent = if (settings.account?.type == AccountType.YGGDRASIL) {
+            progress.report("Проверка входа Ely.by", null)
+            AuthlibInjector.ensure()
+            AuthlibInjector.agentArg(settings.account)
+        } else null
+
         withContext(Dispatchers.IO) {
             writeEula(root)
             writeProperties(root, instance)
-            writeJvmArgs(root, settings)
+            enforceAuthMode(root, agent != null)
+            writeJvmArgs(root, settings, agent)
             copyConfigs(instance, root)
+            seedWorldDatapacks(instance, root)
         }
 
         progress.report("Моды сервера", null)
@@ -126,8 +137,9 @@ object ServerLauncher {
             # Создано лаунчером Mint для сборки ${instance.name}
             motd=${instance.name}
             server-port=$DEFAULT_PORT
-            # Офлайн-режим: в сборку заходят и по офлайн-нику, и через Ely.by
+            # online-mode и enforce-secure-profile выставляет лаунчер при каждом запуске
             online-mode=false
+            enforce-secure-profile=false
             # Прогрузкой дальних чанков занимается Distant Horizons, ванильная дальность умеренная
             view-distance=12
             simulation-distance=8
@@ -140,7 +152,7 @@ object ServerLauncher {
         )
     }
 
-    private fun writeJvmArgs(root: File, settings: LauncherSettings) {
+    private fun writeJvmArgs(root: File, settings: LauncherSettings, agent: String?) {
         val memory = settings.serverMemoryMb
         File(root, "user_jvm_args.txt").writeText(
             """
@@ -150,8 +162,68 @@ object ServerLauncher {
             -XX:+UseG1GC
             -XX:+UnlockExperimentalVMOptions
             -XX:MaxGCPauseMillis=50
-            """.trimIndent() + "\n"
+            """.trimIndent() + "\n" + (agent?.let { "$it\n" } ?: "")
         )
+    }
+
+    /**
+     * Скины берутся из профиля игрока, а профиль сервер получает только в онлайн-режиме.
+     * Поэтому при входе через Ely.by поднимаем online-mode и цепляем тот же authlib-injector,
+     * что и у игры; с офлайн-аккаунтом оставляем офлайн — иначе на сервер не пустит никого.
+     *
+     * enforce-secure-profile выключен всегда: Ely.by не выдаёт подписи ключей Mojang,
+     * и с проверкой сервер выкидывает игроков при входе.
+     *
+     * Эти два ключа — забота лаунчера, остальной server.properties остаётся файлом игрока.
+     */
+    private fun enforceAuthMode(root: File, online: Boolean) {
+        val file = File(root, "server.properties")
+        if (!file.isFile) return
+        val wanted = mapOf("online-mode" to online.toString(), "enforce-secure-profile" to "false")
+        val seen = mutableSetOf<String>()
+        val lines = file.readLines().map { line ->
+            val key = line.substringBefore('=').trim()
+            val value = wanted[key] ?: return@map line
+            seen += key
+            "$key=$value"
+        }
+        val missing = wanted.filterKeys { it !in seen }.map { (k, v) -> "$k=$v" }
+        file.writeText((lines + missing).joinToString("\n") + "\n")
+    }
+
+    /**
+     * Датапаки сборки (пресет генерации ReTerraForged) кладутся внутрь мира — только оттуда
+     * сервер их читает. Работает это лишь при создании мира: у готового мира генератор уже
+     * записан в level.dat, и подкладывать пресет поздно.
+     */
+    private fun seedWorldDatapacks(instance: Instance, root: File) {
+        val packs = packDatapacks(instance)
+        if (packs.isEmpty()) return
+        val world = File(root, levelName(root))
+        if (world.isDirectory) return
+        val target = File(world, "datapacks").apply { mkdirs() }
+        packs.forEach { it.copyTo(File(target, it.name), overwrite = true) }
+    }
+
+    private fun packDatapacks(instance: Instance) =
+        File(instance.dir, "datapacks").listFiles { f -> f.isFile && f.extension == "zip" }.orEmpty().toList()
+
+    /** Мир уже есть, но создан без пресета генерации — рельеф в нём ванильный. */
+    fun worldMissesDatapacks(instance: Instance): Boolean {
+        val packs = packDatapacks(instance)
+        if (packs.isEmpty()) return false
+        val root = dir(instance)
+        val world = File(root, levelName(root))
+        if (!world.isDirectory) return false
+        return packs.any { !File(world, "datapacks/${it.name}").isFile }
+    }
+
+    private fun levelName(root: File): String {
+        val file = File(root, "server.properties")
+        if (!file.isFile) return "world"
+        return file.readLines().firstOrNull { it.startsWith("level-name=") }
+            ?.substringAfter('=')?.trim()?.ifBlank { null }
+            ?: "world"
     }
 
     /**
@@ -160,7 +232,8 @@ object ServerLauncher {
      * их могли поправить отдельно.
      */
     private fun copyConfigs(instance: Instance, root: File) {
-        for (name in listOf("config", "defaultconfigs", "datapacks", "kubejs")) {
+        // datapacks сюда не входят: их место внутри мира, см. seedWorldDatapacks
+        for (name in listOf("config", "defaultconfigs", "kubejs")) {
             val src = File(instance.dir, name)
             if (!src.isDirectory) continue
             src.walkTopDown().filter { it.isFile }.forEach { file ->
@@ -283,12 +356,19 @@ object ServerLauncher {
     }
 
     /**
-     * ProximaTunnel не выдаёт отдельный адрес: друзья заходят на общий хаб и выбирают
-     * сервер по MOTD. Поэтому ловим сам факт подключения туннеля.
+     * Адрес сервера в локальной сети: по нему заходят с других машин дома.
+     * Снаружи сервер пока недоступен — способ пускать друзей из интернета ещё выбирается.
      */
-    const val TUNNEL_HUB = "proximamp.com"
-
-    fun isTunnelUp(line: String) = line.contains("Connection to ProximaMP server established", ignoreCase = true)
+    fun lanAddress(instance: Instance): String {
+        val host = runCatching {
+            java.net.DatagramSocket().use { probe ->
+                // Ядро само выберет сетевой интерфейс с маршрутом наружу; пакетов не шлём
+                probe.connect(java.net.InetAddress.getByName("192.168.0.1"), 9)
+                probe.localAddress.hostAddress
+            }
+        }.getOrNull()?.takeIf { it != "0.0.0.0" } ?: "localhost"
+        return "$host:${port(instance)}"
+    }
 
     /** Сервер закончил загрузку мира. */
     fun isReady(line: String) = Regex("""Done \([^)]*\)! For help""").containsMatchIn(line)

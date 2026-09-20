@@ -91,8 +91,8 @@ private fun server(id: String) = kotlinx.coroutines.runBlocking {
         synced, java,
         onLine = { line ->
             println("[server] $line")
-            if (mint.game.ServerLauncher.isTunnelUp(line)) {
-                println("[mint] туннель поднят: друзьям зайти на ${mint.game.ServerLauncher.TUNNEL_HUB} и выбрать сервер по названию")
+            if (mint.game.ServerLauncher.isReady(line)) {
+                println("[mint] сервер готов: в локальной сети ${mint.game.ServerLauncher.lanAddress(synced)}")
             }
         },
         onExit = { done.complete(it) },

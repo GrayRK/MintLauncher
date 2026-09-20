@@ -188,11 +188,9 @@ private fun ServerStatus(app: AppState, onArt: Boolean) {
         Icon(if (failed) MintIcon.Warning else MintIcon.Server, 14.dp, if (failed) danger else accent)
         val label = when (state) {
             is ServerState.Preparing -> state.stage
-            is ServerState.Running -> when {
-                !state.ready -> "Сервер загружает мир…"
-                state.tunnel -> "Сервер работает · друзьям: ${mint.game.ServerLauncher.TUNNEL_HUB}"
-                else -> "Сервер работает · localhost:${mint.game.ServerLauncher.DEFAULT_PORT}"
-            }
+            is ServerState.Running ->
+                if (state.ready) "Сервер работает · ${mint.game.ServerLauncher.lanAddress(app.selectedInstance)}"
+                else "Сервер загружает мир…"
             is ServerState.Stopping -> "Сервер выключается…"
             is ServerState.Failed -> state.message
             ServerState.Idle -> ""
@@ -276,9 +274,9 @@ private fun NewsCard(modifier: Modifier) {
     Card(modifier, radius = 15.dp, padding = PaddingValues(horizontal = 16.dp, vertical = 15.dp), spacing = 9.dp) {
         Txt("Что нового", manrope(12.5f, FontWeight.SemiBold))
         Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-            Txt("Mint 0.2.3 — вкладка сервера и MineColonies", manrope(12f, FontWeight.SemiBold, MintColors.ink(0.85f)))
+            Txt("Mint 0.2.4 — сервер со скинами и рельефом сборки", manrope(12f, FontWeight.SemiBold, MintColors.ink(0.85f)))
             Txt(
-                "У запущенного сервера теперь своя вкладка с консолью, а в CreateMint приехал MineColonies.",
+                "Сервер пускает по Ely.by со скинами и генерирует рельеф сборки, а не ванильный.",
                 manrope(11.5f, FontWeight.Normal, MintColors.ink(0.78f), lineHeight = 16.7.sp),
                 maxLines = 3,
             )
