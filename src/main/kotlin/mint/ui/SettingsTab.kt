@@ -71,6 +71,21 @@ fun SettingsTab(app: AppState) {
                 Txt("$maxGb ГБ", manrope(11.5f, color = MintColors.ink(0.78f)))
             }
         }
+        Card {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Txt("Память локального сервера", manrope(14f, FontWeight.SemiBold))
+                Spacer()
+                Txt("${formatGb(s.serverMemoryMb / 1024f)} ГБ", nunito(22f, color = MintColors.MintDeep))
+            }
+            MemorySlider(
+                valueGb = s.serverMemoryMb / 1024f, minGb = 2, maxGb = maxGb,
+                onChange = { gb -> app.updateSettings { it.copy(serverMemoryMb = gb * 1024) } },
+            )
+            Txt(
+                "Сервер и игра запускаются вместе, поэтому в сумме они не должны занимать всю память компьютера.",
+                manrope(11.5f, color = MintColors.ink(0.78f)),
+            )
+        }
 
         Section("Java")
         Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {

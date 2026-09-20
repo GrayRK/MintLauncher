@@ -40,6 +40,16 @@ sealed interface LaunchState {
     data class Failed(val message: String) : LaunchState
 }
 
+sealed interface ServerState {
+    data object Idle : ServerState
+    data class Preparing(val stage: String, val fraction: Float?) : ServerState
+
+    /** Сервер работает; [tunnel] — поднялся ли ProximaTunnel для друзей извне. */
+    data class Running(val tunnel: Boolean, val ready: Boolean) : ServerState
+    data object Stopping : ServerState
+    data class Failed(val message: String) : ServerState
+}
+
 class AppState(private val scope: CoroutineScope, private val onHideWindow: (Boolean) -> Unit) {
     var settings by mutableStateOf(SettingsStore.load())
         private set
@@ -55,9 +65,12 @@ class AppState(private val scope: CoroutineScope, private val onHideWindow: (Boo
         private set
     var launch by mutableStateOf<LaunchState>(LaunchState.Idle)
         private set
+    var server by mutableStateOf<ServerState>(ServerState.Idle)
+        private set
     var javaInfo by mutableStateOf<JavaInfo?>(null)
         private set
     val consoleLines = mutableStateListOf<String>()
+    val serverLines = mutableStateListOf<String>()
 
     // Состояние экрана входа
     var loginBusy by mutableStateOf(false)
@@ -66,6 +79,8 @@ class AppState(private val scope: CoroutineScope, private val onHideWindow: (Boo
     var needsTotp by mutableStateOf(false)
 
     private var launchJob: Job? = null
+    private var serverJob: Job? = null
+    private var serverHandle: mint.game.ServerLauncher.Handle? = null
 
     val account: Account? get() = settings.account
     val selectedInstance: Instance
@@ -172,6 +187,75 @@ class AppState(private val scope: CoroutineScope, private val onHideWindow: (Boo
 
     fun cancelLaunch() {
         launchJob?.cancel()
+    }
+
+    // ---- Локальный сервер сборки ----
+
+    fun acceptEula() = updateSettings { it.copy(eulaAccepted = true) }
+
+    fun toggleServer() {
+        when (server) {
+            is ServerState.Running -> stopServer()
+            is ServerState.Preparing -> serverJob?.cancel()
+            else -> startServer()
+        }
+    }
+
+    private fun stopServer() {
+        val handle = serverHandle ?: run { server = ServerState.Idle; return }
+        server = ServerState.Stopping
+        scope.launch(Dispatchers.IO) { handle.stop() }
+    }
+
+    private fun startServer() {
+        if (!settings.eulaAccepted) {
+            server = ServerState.Failed("Нужно принять EULA Minecraft")
+            return
+        }
+        serverLines.clear()
+        serverJob = scope.launch {
+            try {
+                val progress = mint.game.ProgressSink { stage, fraction ->
+                    scope.launch(Dispatchers.Main) { server = ServerState.Preparing(stage, fraction) }
+                }
+                server = ServerState.Preparing("Подготовка сервера", null)
+                val java = GameLauncher.resolveJava(settings, progress)
+                // Клиентская часть сборки нужна серверу целиком: моды и конфиги берутся из неё
+                val (instance, _) = GameLauncher.prepare(selectedInstance, java, progress)
+                withContext(Dispatchers.Main) { reloadInstances() }
+                mint.game.ServerLauncher.prepare(instance, java, settings, progress)
+
+                progress.report("Запуск сервера", null)
+                serverHandle = mint.game.ServerLauncher.launch(
+                    instance, java,
+                    onLine = { line ->
+                        scope.launch(Dispatchers.Main) {
+                            serverLines += line
+                            if (serverLines.size > 2000) serverLines.removeRange(0, serverLines.size - 2000)
+                            val current = server as? ServerState.Running ?: return@launch
+                            val tunnel = current.tunnel || mint.game.ServerLauncher.isTunnelUp(line)
+                            val ready = current.ready || mint.game.ServerLauncher.isReady(line)
+                            if (tunnel != current.tunnel || ready != current.ready) {
+                                server = ServerState.Running(tunnel, ready)
+                            }
+                        }
+                    },
+                    onExit = { code ->
+                        scope.launch(Dispatchers.Main) {
+                            serverHandle = null
+                            server = if (code == 0) ServerState.Idle
+                            else ServerState.Failed("Сервер завершился с кодом $code. Лог: data/logs/server-latest.log")
+                        }
+                    },
+                )
+                withContext(Dispatchers.Main) { server = ServerState.Running(tunnel = false, ready = false) }
+            } catch (e: CancellationException) {
+                server = ServerState.Idle
+            } catch (e: Exception) {
+                e.printStackTrace()
+                server = ServerState.Failed(e.message ?: e.toString())
+            }
+        }
     }
 
     fun play() {

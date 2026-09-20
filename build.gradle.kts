@@ -8,7 +8,7 @@ plugins {
 }
 
 group = "mint"
-version = "0.1.0"
+version = "0.2.0"
 
 dependencies {
     implementation(compose.desktop.currentOs)
@@ -46,6 +46,10 @@ compose.desktop {
 
 // В режиме разработки (./gradlew run) данные лаунчера лежат в ./run.
 // Только для задачи run: в jvmArgs приложения путь попал бы в собранный exe.
+// -PmintHome=<путь> подставляет другой каталог — так проверяется установка «с нуля», как у игрока.
 tasks.withType<JavaExec>().configureEach {
-    if (name == "run") systemProperty("mint.home", rootDir.resolve("run").absolutePath)
+    if (name == "run") {
+        val home = (findProperty("mintHome") as String?) ?: rootDir.resolve("run").absolutePath
+        systemProperty("mint.home", home)
+    }
 }

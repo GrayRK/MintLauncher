@@ -30,8 +30,9 @@ import java.awt.Dimension
 
 fun main(args: Array<String>) {
     if (args.firstOrNull() == "--headless") return headless(args.getOrElse(1) { "Steve" })
-    if (args.firstOrNull() == "--pack-manifest") return packManifest(args.getOrElse(1) { "vanillamint" })
-    if (args.firstOrNull() == "--pack-sync") return packSync(args.getOrElse(1) { "vanillamint" })
+    if (args.firstOrNull() == "--pack-manifest") return packManifest(args.getOrElse(1) { "createmint" })
+    if (args.firstOrNull() == "--pack-sync") return packSync(args.getOrElse(1) { "createmint" })
+    if (args.firstOrNull() == "--server") return server(args.getOrElse(1) { "createmint" })
     gui()
 }
 
@@ -70,6 +71,37 @@ private fun packSync(id: String) = kotlinx.coroutines.runBlocking {
     if (mint.game.Packs.isDevCopy(instance)) println("[mint] в папке сборки есть .git — это рабочая копия, синхронизация пропущена")
     val synced = mint.game.Packs.sync(instance, progress)
     println("[mint] ${synced.name} · ${synced.minecraft} · ${synced.dir}")
+}
+
+/** Служебный режим: поднять локальный сервер сборки без UI. */
+private fun server(id: String) = kotlinx.coroutines.runBlocking {
+    val settings = mint.core.SettingsStore.load()
+    val instance = mint.game.Instances.all().firstOrNull { it.id == id }
+        ?: return@runBlocking println("[mint] сборка «$id» не найдена в ${mint.core.MintPaths.instances}")
+    val progress = mint.game.ProgressSink { stage, f -> println("[mint] $stage ${f?.let { "%.0f%%".format(it * 100) } ?: ""}") }
+    val java = mint.game.GameLauncher.resolveJava(settings, progress)
+    val (synced, _) = mint.game.GameLauncher.prepare(instance, java, progress)
+    try {
+        mint.game.ServerLauncher.prepare(synced, java, settings, progress)
+    } catch (e: java.io.IOException) {
+        return@runBlocking println("[mint] ${e.message}")
+    }
+    val done = kotlinx.coroutines.CompletableDeferred<Int>()
+    val handle = mint.game.ServerLauncher.launch(
+        synced, java,
+        onLine = { line ->
+            println("[server] $line")
+            if (mint.game.ServerLauncher.isTunnelUp(line)) {
+                println("[mint] туннель поднят: друзьям зайти на ${mint.game.ServerLauncher.TUNNEL_HUB} и выбрать сервер по названию")
+            }
+        },
+        onExit = { done.complete(it) },
+    )
+    // Консоль лаунчера становится консолью сервера: stop завершает его штатно
+    kotlin.concurrent.thread(isDaemon = true) {
+        generateSequence(::readLine).forEach { handle.command(it) }
+    }
+    println("[mint] сервер завершился с кодом ${done.await()}")
 }
 
 private fun gui() = application {
