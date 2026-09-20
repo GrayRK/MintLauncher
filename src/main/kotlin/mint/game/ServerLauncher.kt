@@ -43,6 +43,29 @@ object ServerLauncher {
 
     private val isWindows get() = System.getProperty("os.name").orEmpty().startsWith("Windows", ignoreCase = true)
 
+    /** Игру запускает javaw (без консольного окна), а серверу нужен обычный java. */
+    private fun console(java: JavaInfo): File =
+        File(java.executable.parentFile, "java.exe").takeIf { it.isFile } ?: java.executable
+
+    /** Порт из server.properties; файла ещё нет — значит будет [DEFAULT_PORT]. */
+    fun port(instance: Instance): Int {
+        val file = File(dir(instance), "server.properties")
+        if (!file.isFile) return DEFAULT_PORT
+        return file.readLines()
+            .firstOrNull { it.startsWith("server-port=") }
+            ?.substringAfter('=')?.trim()?.toIntOrNull()
+            ?: DEFAULT_PORT
+    }
+
+    /**
+     * Сервер, который не смог занять порт, падает с невнятным «Failed to initialize server».
+     * Проверяем заранее — чаще всего это уже запущенный сервер этой же сборки.
+     */
+    private fun checkPortFree(port: Int) {
+        val busy = runCatching { java.net.ServerSocket(port).close() }.isFailure
+        if (busy) throw IOException("Порт $port уже занят — возможно, сервер этой сборки уже запущен")
+    }
+
     /**
      * Готовит папку сервера: установка NeoForge, EULA, server.properties, моды и конфиги.
      * Клиентская часть сборки к этому моменту уже синхронизирована ([GameLauncher.prepare]).
@@ -74,7 +97,7 @@ object ServerLauncher {
         val installer = NeoForgeInstaller.installerJar(instance.loaderVersion, ProgressSink { _, _ -> })
         val log = File(MintPaths.logs, "server-install.log").apply { parentFile.mkdirs() }
         val code = withContext(Dispatchers.IO) {
-            ProcessBuilder(java.executable.absolutePath, "-jar", installer.absolutePath, "--installServer", root.absolutePath)
+            ProcessBuilder(console(java).absolutePath, "-jar", installer.absolutePath, "--installServer", root.absolutePath)
                 .directory(root)
                 .redirectErrorStream(true)
                 .redirectOutput(ProcessBuilder.Redirect.to(log))
@@ -158,6 +181,12 @@ object ServerLauncher {
         val sideOf = manifest.files.associate { it.path.substringAfterLast('/') to it.side }
         val mods = modsDir(instance).apply { mkdirs() }
 
+        // Без манифеста стороны неизвестны, и на сервер уедут клиентские моды — он упадёт
+        // на первом же из них. Сказать об этом честно полезнее, чем молча собрать битый сервер.
+        if (sideOf.isEmpty()) {
+            progress.report("Внимание: в сборке нет mint-pack.json, моды не разделены на клиент и сервер", null)
+        }
+
         val wanted = instance.modsDir.listFiles { f -> f.isFile && f.extension == "jar" }
             .orEmpty()
             .filter { sideOf[it.name] != PackSide.CLIENT }
@@ -220,8 +249,10 @@ object ServerLauncher {
         val args = argsFile(instance)
         if (!args.isFile) throw IOException("Сервер не установлен: нет ${args.name}")
 
+        checkPortFree(port(instance))
+
         val command = listOf(
-            java.executable.absolutePath,
+            console(java).absolutePath,
             "@user_jvm_args.txt",
             "@${args.relativeTo(root).invariantSeparatorsPath}",
             "nogui",
