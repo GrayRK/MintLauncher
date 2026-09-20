@@ -20,7 +20,7 @@ enum class MintIcon(val file: String) {
     User("user"), GameController("game-controller"), Cpu("cpu"), PaintBrush("paint-brush"),
     Windows("windows-logo"), FolderOpen("folder-open"), Refresh("arrow-clockwise"), SignOut("sign-out"),
     Warning("warning-circle"), Rotate3d("rotate-3d"),
-    Server("hard-drives"), Stop("stop"), Copy("copy"),
+    Server("hard-drives"), Stop("stop"),
 }
 
 private val cache = HashMap<MintIcon, Painter>()
