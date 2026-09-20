@@ -134,18 +134,22 @@ fun OutlineButton(
     radius: Dp = 14.dp,
     textStyle: TextStyle = manrope(13.5f, FontWeight.SemiBold),
     enabled: Boolean = true,
+    /** Кнопка лежит на арте сборки: рамка и подложка светлые, а не чернильные. */
+    onArt: Boolean = false,
     leading: (@Composable () -> Unit)? = null,
     onClick: () -> Unit,
 ) {
     val (source, hovered) = rememberHover()
     val shape = RoundedCornerShape(radius)
     val active = hovered && enabled
+    val idleBorder = if (onArt) MintColors.onArt(0.45f) else MintColors.ink(0.16f)
+    val idleFill = if (onArt) MintColors.onArt(0.12f) else Color.Transparent
     Row(
         modifier
             .height(height)
             .clip(shape)
-            .background(if (active) MintColors.Mint.copy(alpha = 0.22f) else Color.Transparent)
-            .border(1.dp, if (active) MintColors.MintFocus.copy(alpha = 0.7f) else MintColors.ink(0.16f), shape)
+            .background(if (active) MintColors.Mint.copy(alpha = 0.22f) else idleFill)
+            .border(1.dp, if (active) MintColors.MintFocus.copy(alpha = 0.7f) else idleBorder, shape)
             .clickableNoRipple(source, enabled, onClick)
             .padding(horizontal = 15.dp),
         horizontalArrangement = Arrangement.spacedBy(9.dp, Alignment.CenterHorizontally),
@@ -296,9 +300,15 @@ fun Logo(size: Dp, radius: Dp, fontSize: Float) {
 }
 
 @Composable
-fun ProgressBar(fraction: Float?, modifier: Modifier = Modifier, height: Dp = 7.dp) {
+fun ProgressBar(
+    fraction: Float?,
+    modifier: Modifier = Modifier,
+    height: Dp = 7.dp,
+    /** Подложка: на арте чернильная дорожка не видна. */
+    track: Color = MintColors.ink(0.08f),
+) {
     val shape = RoundedCornerShape(height / 2 + 0.5.dp)
-    Box(modifier.height(height).clip(shape).background(MintColors.ink(0.08f))) {
+    Box(modifier.height(height).clip(shape).background(track)) {
         if (fraction != null) {
             Box(Modifier.fillMaxHeight().fillMaxWidth(fraction.coerceIn(0f, 1f)).clip(shape).background(MintColors.Mint))
         } else {

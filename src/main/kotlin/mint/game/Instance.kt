@@ -25,6 +25,9 @@ data class Instance(
     val dir get() = File(MintPaths.instances, id)
     val modsDir get() = File(dir, "mods")
 
+    /** Арт сборки для главной; null — рисуем обычный мятный градиент. */
+    val banner: File? get() = File(dir, "banner.png").takeIf { it.isFile }
+
     /** id версии в каталоге versions/, которую нужно запускать. */
     val versionId: String
         get() = when (loader) {

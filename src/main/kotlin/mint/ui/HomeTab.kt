@@ -1,6 +1,7 @@
 package mint.ui
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -22,12 +23,16 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.loadImageBitmap
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -55,12 +60,37 @@ fun HomeTab(app: AppState) {
 private fun Hero(app: AppState, modifier: Modifier) {
     val shape = RoundedCornerShape(18.dp)
     val instance = app.selectedInstance
+    val art = rememberArt(instance.banner)
+    val onArt = art != null
+
+    // Поверх арта чернильные цвета не читаются — берём светлую пару
+    val accent = if (onArt) MintColors.OnArtAccent else MintColors.MintDeep
+    val title = if (onArt) MintColors.OnArt else MintColors.InkStrong
+    val body = if (onArt) MintColors.onArt(0.82f) else MintColors.ink(0.78f)
+    val soft = if (onArt) MintColors.onArt(0.9f) else MintColors.ink(0.85f)
+    val danger = if (onArt) MintColors.OnArtDanger else MintColors.Danger
+    val track = if (onArt) MintColors.onArt(0.22f) else MintColors.ink(0.08f)
+
     Box(
         modifier.clip(shape)
             .background(Brush.linearGradient(listOf(MintColors.HeroTop, MintColors.HeroBottom), start = Offset(0f, 0f), end = Offset(600f, 1400f)))
             .border(1.dp, MintColors.ink(0.07f), shape)
     ) {
-        DiagonalStripes(Modifier.fillMaxSize())
+        if (art != null) {
+            Image(art, contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+            // Затемнение снизу: под ним живут название сборки и кнопки
+            Box(
+                Modifier.fillMaxSize().background(
+                    Brush.verticalGradient(
+                        0f to Color.Transparent,
+                        0.42f to MintColors.ArtScrim.copy(alpha = 0.30f),
+                        1f to MintColors.ArtScrim,
+                    )
+                )
+            )
+        } else {
+            DiagonalStripes(Modifier.fillMaxSize())
+        }
 
         val launch = app.launch
         if (app.settings.showConsole && app.consoleLines.isNotEmpty()) {
@@ -73,33 +103,36 @@ private fun Hero(app: AppState, modifier: Modifier) {
             horizontalArrangement = Arrangement.spacedBy(20.dp),
         ) {
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                Txt("ПРОДОЛЖИТЬ", manrope(10.5f, FontWeight.SemiBold, MintColors.MintDeep, letterSpacing = 1.4.sp))
-                Txt(instance.name, nunito(30f, color = MintColors.InkStrong, lineHeight = 34.sp), maxLines = 1)
+                Txt("ПРОДОЛЖИТЬ", manrope(10.5f, FontWeight.SemiBold, accent, letterSpacing = 1.4.sp))
+                Txt(instance.name, nunito(30f, color = title, lineHeight = 34.sp), maxLines = 1)
                 val subtitle = instance.subtitle.let {
                     if (instance.loaderVersion.isNotBlank()) it.replace("NeoForge", "NeoForge ${instance.loaderVersion}") else it
                 }
-                Txt(subtitle, manrope(12.5f, FontWeight.Normal, MintColors.ink(0.78f)))
+                Txt(subtitle, manrope(12.5f, FontWeight.Normal, body))
                 when (launch) {
                     is LaunchState.Preparing -> Column(Modifier.padding(top = 10.dp).widthIn(max = 420.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
-                        Txt(launch.stage, manrope(11.5f, color = MintColors.ink(0.85f)), maxLines = 1)
-                        ProgressBar(launch.fraction, Modifier.fillMaxWidth())
+                        Txt(launch.stage, manrope(11.5f, color = soft), maxLines = 1)
+                        ProgressBar(launch.fraction, Modifier.fillMaxWidth(), track = track)
                     }
                     is LaunchState.Failed -> Row(
                         Modifier.padding(top = 10.dp).widthIn(max = 520.dp),
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                         verticalAlignment = Alignment.Top,
                     ) {
-                        Icon(MintIcon.Warning, 14.dp, MintColors.Danger)
-                        Txt(launch.message, manrope(11.5f, color = MintColors.Danger), maxLines = 3)
+                        Icon(MintIcon.Warning, 14.dp, danger)
+                        Txt(launch.message, manrope(11.5f, color = danger), maxLines = 3)
                     }
                     else -> {}
                 }
-                ServerStatus(app)
+                ServerStatus(app, onArt)
             }
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.Bottom) {
-                ServerButton(app)
+                ServerButton(app, onArt)
                 when (launch) {
-                    is LaunchState.Preparing -> OutlineButton("Отмена", height = 52.dp, radius = 15.dp) { app.cancelLaunch() }
+                    is LaunchState.Preparing -> OutlineButton(
+                        "Отмена", height = 52.dp, radius = 15.dp, onArt = onArt,
+                        textStyle = manrope(13.5f, FontWeight.SemiBold, if (onArt) MintColors.OnArt else MintColors.Ink),
+                    ) { app.cancelLaunch() }
                     is LaunchState.Running -> PrimaryButton(
                         "В игре", height = 52.dp, radius = 15.dp, enabled = false,
                         textStyle = nunito(18f, color = MintColors.MintInk),
@@ -116,37 +149,51 @@ private fun Hero(app: AppState, modifier: Modifier) {
     }
 }
 
+/** Арт сборки читается с диска один раз; файла нет или он битый — рисуем градиент. */
+@Composable
+private fun rememberArt(file: java.io.File?): ImageBitmap? {
+    if (file == null) return null
+    return remember(file.path, file.lastModified()) {
+        runCatching { file.inputStream().buffered().use { loadImageBitmap(it) } }.getOrNull()
+    }
+}
+
 /** Кнопка локального сервера: поднять сборку для друзей и остановить её. */
 @Composable
-private fun ServerButton(app: AppState) {
-    when (val state = app.server) {
+private fun ServerButton(app: AppState, onArt: Boolean) {
+    val tint = if (onArt) MintColors.onArt(0.85f) else MintColors.ink(0.7f)
+    val text = manrope(13.5f, FontWeight.SemiBold, if (onArt) MintColors.OnArt else MintColors.Ink)
+    when (app.server) {
         is ServerState.Preparing -> OutlineButton(
-            "Отмена сервера", height = 52.dp, radius = 15.dp,
+            "Отмена сервера", height = 52.dp, radius = 15.dp, onArt = onArt, textStyle = text,
         ) { app.toggleServer() }
         is ServerState.Running -> OutlineButton(
-            "Остановить", height = 52.dp, radius = 15.dp,
-            leading = { Icon(MintIcon.Stop, 16.dp, MintColors.ink(0.7f)) },
+            "Остановить", height = 52.dp, radius = 15.dp, onArt = onArt, textStyle = text,
+            leading = { Icon(MintIcon.Stop, 16.dp, tint) },
         ) { app.toggleServer() }
         is ServerState.Stopping -> OutlineButton(
-            "Остановка…", height = 52.dp, radius = 15.dp, enabled = false,
+            "Остановка…", height = 52.dp, radius = 15.dp, enabled = false, onArt = onArt, textStyle = text,
         ) {}
         else -> OutlineButton(
-            "Сервер", height = 52.dp, radius = 15.dp,
-            leading = { Icon(MintIcon.Server, 16.dp, MintColors.ink(0.7f)) },
+            "Сервер", height = 52.dp, radius = 15.dp, onArt = onArt, textStyle = text,
+            leading = { Icon(MintIcon.Server, 16.dp, tint) },
         ) { app.toggleServer() }
     }
 }
 
 /** Ход запуска сервера, его адрес и согласие с EULA. */
 @Composable
-private fun ServerStatus(app: AppState) {
+private fun ServerStatus(app: AppState, onArt: Boolean) {
     when (val state = app.server) {
         is ServerState.Preparing -> Column(
             Modifier.padding(top = 10.dp).widthIn(max = 420.dp),
             verticalArrangement = Arrangement.spacedBy(7.dp),
         ) {
-            Txt(state.stage, manrope(11.5f, color = MintColors.ink(0.85f)), maxLines = 1)
-            ProgressBar(state.fraction, Modifier.fillMaxWidth())
+            Txt(state.stage, manrope(11.5f, color = if (onArt) MintColors.onArt(0.9f) else MintColors.ink(0.85f)), maxLines = 1)
+            ProgressBar(
+                state.fraction, Modifier.fillMaxWidth(),
+                track = if (onArt) MintColors.onArt(0.22f) else MintColors.ink(0.08f),
+            )
         }
 
         is ServerState.Running -> Row(
@@ -154,7 +201,7 @@ private fun ServerStatus(app: AppState) {
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Icon(MintIcon.Server, 14.dp, MintColors.MintDeep)
+            Icon(MintIcon.Server, 14.dp, if (onArt) MintColors.OnArtAccent else MintColors.MintDeep)
             val hub = mint.game.ServerLauncher.TUNNEL_HUB
             val label = when {
                 !state.ready -> "Сервер загружается…"
@@ -162,7 +209,7 @@ private fun ServerStatus(app: AppState) {
                 state.tunnel -> "Сервер работает · друзьям: $hub, там выбрать «${app.selectedInstance.name}»"
                 else -> "Сервер работает · localhost:${mint.game.ServerLauncher.DEFAULT_PORT} · туннель не поднялся"
             }
-            Txt(label, manrope(11.5f, color = MintColors.ink(0.85f)), maxLines = 1)
+            Txt(label, manrope(11.5f, color = if (onArt) MintColors.onArt(0.9f) else MintColors.ink(0.85f)), maxLines = 1)
             if (state.ready) {
                 val copied = if (state.tunnel) hub else "localhost:${mint.game.ServerLauncher.DEFAULT_PORT}"
                 LinkText("копировать") { copyToClipboard(copied) }
@@ -171,7 +218,7 @@ private fun ServerStatus(app: AppState) {
 
         is ServerState.Stopping -> Txt(
             "Сервер сохраняет мир и выключается…",
-            manrope(11.5f, color = MintColors.ink(0.85f)),
+            manrope(11.5f, color = if (onArt) MintColors.onArt(0.9f) else MintColors.ink(0.85f)),
             Modifier.padding(top = 10.dp),
         )
 
@@ -180,8 +227,9 @@ private fun ServerStatus(app: AppState) {
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.Top) {
-                Icon(MintIcon.Warning, 14.dp, MintColors.Danger)
-                Txt(state.message, manrope(11.5f, color = MintColors.Danger), maxLines = 3)
+                val danger = if (onArt) MintColors.OnArtDanger else MintColors.Danger
+                Icon(MintIcon.Warning, 14.dp, danger)
+                Txt(state.message, manrope(11.5f, color = danger), maxLines = 3)
             }
             if (!app.settings.eulaAccepted) {
                 LinkText("Принимаю EULA Minecraft и запускаю сервер") {
