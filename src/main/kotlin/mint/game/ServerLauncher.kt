@@ -7,11 +7,14 @@ import mint.core.AccountType
 import mint.core.DownloadTask
 import mint.core.Http
 import mint.core.LauncherSettings
+import mint.core.MintJson
 import mint.core.MintPaths
+import mint.core.sha1
 import java.io.File
 import java.io.FileWriter
 import java.io.IOException
 import java.io.OutputStreamWriter
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.concurrent.thread
 
 /**
@@ -31,6 +34,9 @@ object ServerLauncher {
     fun modsDir(instance: Instance) = File(dir(instance), "mods")
 
     private fun markerFile(instance: Instance) = File(dir(instance), ".mint-server")
+
+    /** Что из конфигов сборки лаунчер положил на сервер: путь → sha1. */
+    private const val CONFIG_STATE = ".mint-configs.json"
 
     fun isInstalled(instance: Instance) =
         markerFile(instance).takeIf { it.isFile }?.readText()?.trim() == instance.loaderVersion &&
@@ -228,22 +234,47 @@ object ServerLauncher {
 
     /**
      * Конфиги сборки общие для клиента и сервера: серверу нужны те же настройки Create,
-     * генерации мира и Distant Horizons. Уже существующие файлы не трогаем — на сервере
-     * их могли поправить отдельно.
+     * генерации мира и Distant Horizons.
+     *
+     * Правки игрока на сервере сохраняются — но только пока он их действительно делал.
+     * Что положил лаунчер, то он и обновляет: иначе обновление сборки никогда не доезжает
+     * до уже установленного сервера (так на нём остался старый Terralith и сломал генерацию).
      */
     private fun copyConfigs(instance: Instance, root: File) {
-        // datapacks сюда не входят: их место внутри мира, см. seedWorldDatapacks
+        val stateFile = File(root, CONFIG_STATE)
+        val copied = runCatching {
+            MintJson.decodeFromString<Map<String, String>>(stateFile.readText())
+        }.getOrElse { emptyMap() }
+        val next = linkedMapOf<String, String>()
+
         for (name in listOf("config", "defaultconfigs", "kubejs")) {
             val src = File(instance.dir, name)
             if (!src.isDirectory) continue
             src.walkTopDown().filter { it.isFile }.forEach { file ->
-                val target = File(root, "$name/${file.relativeTo(src).invariantSeparatorsPath}")
-                if (target.isFile) return@forEach
+                val path = "$name/${file.relativeTo(src).invariantSeparatorsPath}"
+                val target = File(root, path)
+                val hash = sha1(file)
+                next[path] = hash
+                when {
+                    !target.isFile -> {}
+                    // Файл сборки, а не игрока: содержимое сборки он править не должен
+                    packOwned(path) -> if (sha1(target) == hash) return@forEach
+                    // Игрок правил его сам — не трогаем
+                    sha1(target) != copied[path] -> return@forEach
+                    else -> if (sha1(target) == hash) return@forEach
+                }
                 target.parentFile.mkdirs()
                 file.copyTo(target, overwrite = true)
             }
         }
+        runCatching { stateFile.writeText(MintJson.encodeToString(next)) }
     }
+
+    /** Что лаунчер обновляет всегда: это содержимое сборки, а не настройки игрока. */
+    private fun packOwned(path: String) =
+        path.startsWith("config/paxi/datapacks/") ||
+            path.startsWith("config/paxi/resourcepacks/") ||
+            path.startsWith("defaultconfigs/")
 
     /**
      * Наполняет server/mods: клиентские моды на сервер не едут, серверные докачиваются.
@@ -340,6 +371,10 @@ object ServerLauncher {
             .redirectErrorStream(true)
             .start()
 
+        // Выход сообщаем ровно один раз, кто бы ни заметил его первым
+        val exitReported = AtomicBoolean(false)
+        val fireExit = { code: Int -> if (exitReported.compareAndSet(false, true)) onExit(code) }
+
         thread(name = "mint-server-output", isDaemon = true) {
             FileWriter(log, true).buffered().use { writer ->
                 process.inputStream.bufferedReader().useLines { lines ->
@@ -350,7 +385,14 @@ object ServerLauncher {
                     }
                 }
             }
-            onExit(process.waitFor())
+            fireExit(process.waitFor())
+        }
+
+        // Поток вывода закрывается не всегда: после падения сервер может зависнуть
+        // на своих не-демонах (потоки DH, нативный Rapier у Sable), и тогда лаунчер
+        // так и будет показывать сервер работающим. Ждём сам процесс отдельно.
+        thread(name = "mint-server-watchdog", isDaemon = true) {
+            fireExit(process.waitFor())
         }
         Handle(process)
     }
@@ -372,4 +414,13 @@ object ServerLauncher {
 
     /** Сервер закончил загрузку мира. */
     fun isReady(line: String) = Regex("""Done \([^)]*\)! For help""").containsMatchIn(line)
+
+    /**
+     * Сервер упал. Ждать выхода процесса нельзя: после отчёта о падении JVM может
+     * зависнуть на чужих потоках, и лаунчер будет показывать живой сервер.
+     */
+    fun isCrash(line: String) =
+        line.contains("Preparing crash report", ignoreCase = true) ||
+            line.contains("Failed to start the minecraft server", ignoreCase = true) ||
+            line.contains("This crash report has been saved to", ignoreCase = true)
 }

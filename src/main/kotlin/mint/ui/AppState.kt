@@ -259,6 +259,19 @@ class AppState(private val scope: CoroutineScope, private val onHideWindow: (Boo
                         scope.launch(Dispatchers.Main) {
                             serverLines += line
                             if (serverLines.size > 2000) serverLines.removeRange(0, serverLines.size - 2000)
+
+                            // Падение видно по отчёту о крахе; дожидаться выхода процесса нельзя —
+                            // после краха он может зависнуть, и сервер так и останется «работающим»
+                            if (mint.game.ServerLauncher.isCrash(line)) {
+                                if (server !is ServerState.Failed) {
+                                    server = ServerState.Failed(
+                                        "Сервер упал. Отчёт: instances/${selectedInstance.id}/server/crash-reports, лог: data/logs/server-latest.log"
+                                    )
+                                    serverHandle?.let { handle -> scope.launch(Dispatchers.IO) { handle.stop() } }
+                                }
+                                return@launch
+                            }
+
                             val current = server as? ServerState.Running ?: return@launch
                             if (!current.ready && mint.game.ServerLauncher.isReady(line)) {
                                 server = ServerState.Running(ready = true)
@@ -268,8 +281,12 @@ class AppState(private val scope: CoroutineScope, private val onHideWindow: (Boo
                     onExit = { code ->
                         scope.launch(Dispatchers.Main) {
                             serverHandle = null
-                            if (code == 0) serverIdle()
-                            else server = ServerState.Failed("Сервер завершился с кодом $code. Лог: data/logs/server-latest.log")
+                            when {
+                                // Про падение уже сказали подробнее — не перетираем сообщение кодом выхода
+                                server is ServerState.Failed -> {}
+                                code == 0 -> serverIdle()
+                                else -> server = ServerState.Failed("Сервер завершился с кодом $code. Лог: data/logs/server-latest.log")
+                            }
                         }
                     },
                 )
