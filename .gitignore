@@ -5,6 +5,8 @@ build/
 !**/src/test/**/build/
 .kotlin
 /run/
+# Инсталлер NeoForge кладёт свой лог рядом с рабочим каталогом
+neoforge-*-installer.jar.log
 
 ### IntelliJ IDEA ###
 .idea/modules.xml
