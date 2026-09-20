@@ -8,7 +8,7 @@ plugins {
 }
 
 group = "mint"
-version = "0.2.5"
+version = "0.2.6"
 
 dependencies {
     implementation(compose.desktop.currentOs)

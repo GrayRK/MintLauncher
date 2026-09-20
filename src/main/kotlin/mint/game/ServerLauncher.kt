@@ -267,6 +267,17 @@ object ServerLauncher {
                 file.copyTo(target, overwrite = true)
             }
         }
+        // Файл ушёл из сборки — убираем и с сервера, иначе останется лежать рядом с заменой
+        // и будет спорить с ней (так старый Terralith пережил бы обновление сборки).
+        for ((path, hash) in copied) {
+            if (path in next) continue
+            val target = File(root, path)
+            if (!target.isFile) continue
+            // Игрок мог его править — тогда это уже его файл, не трогаем
+            if (sha1(target) != hash) continue
+            target.delete()
+        }
+
         runCatching { stateFile.writeText(MintJson.encodeToString(next)) }
     }
 
