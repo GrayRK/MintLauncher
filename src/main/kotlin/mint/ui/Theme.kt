@@ -41,6 +41,20 @@ object MintColors {
     val HeroTop get() = pick(0xFFDCEEE4, 0xFF1E2E27)
     val HeroBottom get() = pick(0xFFEFE7D8, 0xFF1B201D)
 
+    // Hero с артом сборки: цвета одинаковы в обеих темах — они лежат поверх затемнения картинки,
+    // а не поверх фона окна.
+    /** Затемнение под текстом на арте: снизу вверх до прозрачного. */
+    val ArtScrim get() = Color(0xF2101512)
+    /** Текст и иконки на арте. */
+    val OnArt get() = Color(0xFFF4F7F3)
+    /** Мятный акцент на арте — светлее, чем MintDeep на песочном фоне. */
+    val OnArtAccent get() = Color(0xFF9FE0C3)
+
+    /** Ошибка на арте: светлее обычного Danger, иначе тонет в затемнении. */
+    val OnArtDanger get() = Color(0xFFE58F78)
+
+    fun onArt(alpha: Float) = OnArt.copy(alpha = alpha)
+
     val Ink get() = pick(0xFF3A3A34, 0xFFE2E6E1)
     val InkStrong get() = pick(0xFF2C2C27, 0xFFF0F3EE)
     val Danger get() = pick(0xFFB4553F, 0xFFE58F78)
