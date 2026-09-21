@@ -17,12 +17,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -93,10 +89,6 @@ private fun Hero(app: AppState, modifier: Modifier) {
         }
 
         val launch = app.launch
-        val consoleArea = Modifier.fillMaxWidth().padding(start = 26.dp, end = 26.dp, top = 22.dp, bottom = 130.dp).fillMaxHeight()
-        // Консоль сервера живёт на своей вкладке — здесь только вывод игры
-        if (app.settings.showConsole && app.consoleLines.isNotEmpty()) Console(app, consoleArea)
-
         Row(
             Modifier.align(Alignment.BottomStart).fillMaxWidth().padding(start = 26.dp, end = 26.dp, bottom = 24.dp),
             verticalAlignment = Alignment.Bottom,
@@ -223,23 +215,6 @@ private fun DiagonalStripes(modifier: Modifier) {
 }
 
 @Composable
-private fun Console(app: AppState, modifier: Modifier) {
-    val state = rememberLazyListState()
-    LaunchedEffect(app.consoleLines.size) {
-        if (app.consoleLines.isNotEmpty()) state.scrollToItem(app.consoleLines.size - 1)
-    }
-    LazyColumn(
-        modifier.clip(RoundedCornerShape(12.dp)).background(MintColors.Surface.copy(alpha = 0.85f)),
-        state = state,
-        contentPadding = PaddingValues(12.dp),
-    ) {
-        items(app.consoleLines) { line ->
-            Txt(line, Mono.copy(fontSize = 10.5.sp, color = MintColors.ink(0.8f)), maxLines = 2)
-        }
-    }
-}
-
-@Composable
 private fun InstancesCard(app: AppState, modifier: Modifier) {
     Card(modifier, radius = 15.dp, padding = PaddingValues(horizontal = 16.dp, vertical = 15.dp), spacing = 11.dp) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -274,9 +249,9 @@ private fun NewsCard(modifier: Modifier) {
     Card(modifier, radius = 15.dp, padding = PaddingValues(horizontal = 16.dp, vertical = 15.dp), spacing = 9.dp) {
         Txt("Что нового", manrope(12.5f, FontWeight.SemiBold))
         Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-            Txt("Mint 0.2.7 — лаунчер обновляется сам", manrope(12f, FontWeight.SemiBold, MintColors.ink(0.85f)))
+            Txt("Mint 0.2.8 — без консоли на главной", manrope(12f, FontWeight.SemiBold, MintColors.ink(0.85f)))
             Txt(
-                "Новые версии ставятся одной кнопкой или автоматически при запуске. У сервера — игроки, мир и настройки.",
+                "Вывод игры больше не закрывает арт сборки. Консоль переедет в отдельное место, а пока лог — в data/logs.",
                 manrope(11.5f, FontWeight.Normal, MintColors.ink(0.78f), lineHeight = 16.7.sp),
                 maxLines = 3,
             )

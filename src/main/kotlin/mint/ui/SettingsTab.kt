@@ -128,11 +128,8 @@ fun SettingsTab(app: AppState) {
 
         Section("Запуск")
         Card(padding = PaddingValues(horizontal = 22.dp, vertical = 6.dp), spacing = 0.dp) {
-            ToggleRow("Закрывать лаунчер при запуске игры", "Лаунчер скроется и вернётся после выхода из игры", s.closeOnLaunch, divider = true) { v ->
+            ToggleRow("Закрывать лаунчер при запуске игры", "Лаунчер скроется и вернётся после выхода из игры", s.closeOnLaunch) { v ->
                 app.updateSettings { it.copy(closeOnLaunch = v) }
-            }
-            ToggleRow("Показывать консоль и логи", "Пригодится, если моды конфликтуют", s.showConsole) { v ->
-                app.updateSettings { it.copy(showConsole = v) }
             }
         }
 

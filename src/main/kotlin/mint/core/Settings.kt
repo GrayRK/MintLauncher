@@ -30,7 +30,6 @@ data class LauncherSettings(
     val javaAuto: Boolean = true,
     val javaPath: String = "",
     val closeOnLaunch: Boolean = false,
-    val showConsole: Boolean = false,
     /** Проверять обновления лаунчера при запуске и ставить их до открытия окна. */
     val autoUpdate: Boolean = true,
     val rememberMe: Boolean = true,
