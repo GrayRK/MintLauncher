@@ -98,7 +98,6 @@ class AppState(private val scope: CoroutineScope, private val onHideWindow: (Boo
         private set
     var javaInfo by mutableStateOf<JavaInfo?>(null)
         private set
-    val consoleLines = mutableStateListOf<String>()
     val serverLines = mutableStateListOf<String>()
 
     // Состояние экрана входа
@@ -669,7 +668,6 @@ class AppState(private val scope: CoroutineScope, private val onHideWindow: (Boo
     fun play() {
         val acc = account ?: run { screen = Screen.Login; return }
         if (launch is LaunchState.Preparing || launch is LaunchState.Running) return
-        consoleLines.clear()
         launchJob = scope.launch {
             try {
                 val progress = mint.game.ProgressSink { stage, fraction ->
@@ -688,12 +686,8 @@ class AppState(private val scope: CoroutineScope, private val onHideWindow: (Boo
                 progress.report("Запуск игры", null)
                 GameLauncher.launch(
                     instance, version, java, freshAccount, settings,
-                    onLine = { line ->
-                        if (settings.showConsole) scope.launch(Dispatchers.Main) {
-                            consoleLines += line
-                            if (consoleLines.size > 2000) consoleLines.removeRange(0, consoleLines.size - 2000)
-                        }
-                    },
+                    // Вывод игры пишется в data/logs/game-latest.log; своя консоль появится отдельно
+                    onLine = {},
                     onExit = { code ->
                         scope.launch(Dispatchers.Main) {
                             onHideWindow(false)
