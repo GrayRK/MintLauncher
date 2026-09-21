@@ -27,6 +27,7 @@ fun FrameWindowScope.MainScreen(app: AppState, actions: WindowActions) {
     Column(Modifier.fillMaxSize()) {
         TitleBar(actions) {
             Spacer()
+            UpdateChip(app)
             AccountChip(app)
         }
         Row(Modifier.fillMaxSize()) {
@@ -74,8 +75,8 @@ private fun SideDock(app: AppState) {
             // Сборки и моды появятся позже
             DockButton(MintIcon.Cube, app.tab == Tab.Instances) { }
             DockButton(MintIcon.Puzzle, app.tab == Tab.Mods) { }
-            // Сервер есть в доке, только пока он запущен: выключенному серверу там делать нечего
-            if (app.serverTabVisible) DockButton(MintIcon.Server, app.tab == Tab.Server) { app.tab = Tab.Server }
+            // Сервер в доке всегда: игроками, миром и удалением управляют и у выключенного
+            DockButton(MintIcon.Server, app.tab == Tab.Server) { app.tab = Tab.Server }
             DockButton(MintIcon.UserCircle, app.tab == Tab.Account) { app.tab = Tab.Account }
             Spacer()
             DockButton(MintIcon.Gear, app.tab == Tab.Settings) { app.tab = Tab.Settings }

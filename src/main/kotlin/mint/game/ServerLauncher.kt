@@ -185,16 +185,7 @@ object ServerLauncher {
     private fun enforceAuthMode(root: File, online: Boolean) {
         val file = File(root, "server.properties")
         if (!file.isFile) return
-        val wanted = mapOf("online-mode" to online.toString(), "enforce-secure-profile" to "false")
-        val seen = mutableSetOf<String>()
-        val lines = file.readLines().map { line ->
-            val key = line.substringBefore('=').trim()
-            val value = wanted[key] ?: return@map line
-            seen += key
-            "$key=$value"
-        }
-        val missing = wanted.filterKeys { it !in seen }.map { (k, v) -> "$k=$v" }
-        file.writeText((lines + missing).joinToString("\n") + "\n")
+        ServerAdmin.setProperties(file, mapOf("online-mode" to online.toString(), "enforce-secure-profile" to "false"))
     }
 
     /**
@@ -347,11 +338,29 @@ object ServerLauncher {
 
         /** Сервер должен сохранить мир сам — убивать процесс можно только если он завис. */
         fun stop() {
-            if (command("stop").isFailure) process.destroy()
-            thread(name = "mint-server-stop", isDaemon = true) {
-                if (!process.waitFor(60, java.util.concurrent.TimeUnit.SECONDS)) process.destroyForcibly()
-            }
+            thread(name = "mint-server-stop", isDaemon = true) { stopAndWait() }
         }
+
+        /** Синхронная остановка: stop, до минуты на сохранение мира, затем принудительно. */
+        internal fun stopAndWait() {
+            if (!process.isAlive) return
+            if (command("stop").isFailure) process.destroy()
+            if (!process.waitFor(60, java.util.concurrent.TimeUnit.SECONDS)) process.destroyForcibly()
+        }
+    }
+
+    /**
+     * Процесс сервера не привязан к лаунчеру: Windows не завершает дочерние процессы
+     * вместе с родителем. Без этого закрытый лаунчер оставлял сервер-сироту, который
+     * держал порт и мир, а управлять им было уже нечем.
+     */
+    private val running = java.util.concurrent.ConcurrentHashMap.newKeySet<Handle>()
+
+    private val shutdownHook by lazy {
+        Runtime.getRuntime().addShutdownHook(thread(start = false, name = "mint-server-shutdown") {
+            // Останавливаем параллельно, чтобы выход не ждал минуту на каждый сервер
+            running.map { thread(name = "mint-server-shutdown-one") { it.stopAndWait() } }.forEach { it.join() }
+        })
     }
 
     suspend fun launch(
@@ -402,10 +411,15 @@ object ServerLauncher {
         // Поток вывода закрывается не всегда: после падения сервер может зависнуть
         // на своих не-демонах (потоки DH, нативный Rapier у Sable), и тогда лаунчер
         // так и будет показывать сервер работающим. Ждём сам процесс отдельно.
+        val handle = Handle(process)
+        shutdownHook
+        running += handle
         thread(name = "mint-server-watchdog", isDaemon = true) {
-            fireExit(process.waitFor())
+            val code = process.waitFor()
+            running -= handle
+            fireExit(code)
         }
-        Handle(process)
+        handle
     }
 
     /**

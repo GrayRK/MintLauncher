@@ -8,7 +8,7 @@ plugins {
 }
 
 group = "mint"
-version = "0.2.6"
+version = "0.2.7"
 
 dependencies {
     implementation(compose.desktop.currentOs)
@@ -42,6 +42,15 @@ compose.desktop {
             }
         }
     }
+}
+
+// Архив для релиза GitHub: лаунчер обновляется именно из него (mint.core.Updater).
+// Внутри папка Mint/ с Mint.exe, app/ и runtime/; имя должно оканчиваться на -windows-portable.zip.
+tasks.register<Zip>("packagePortable") {
+    dependsOn("createDistributable")
+    from(layout.buildDirectory.dir("compose/binaries/main/app"))
+    archiveFileName.set("Mint-${project.version}-windows-portable.zip")
+    destinationDirectory.set(layout.buildDirectory.dir("release"))
 }
 
 // В режиме разработки (./gradlew run) данные лаунчера лежат в ./run.

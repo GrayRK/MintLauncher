@@ -148,10 +148,7 @@ fun SettingsTab(app: AppState) {
         }
 
         Section("О лаунчере")
-        Card(spacing = 4.dp) {
-            Txt("Mint ${GameLauncher.LAUNCHER_VERSION}", manrope(13.5f, FontWeight.SemiBold))
-            Txt("Данные: ${mint.core.MintPaths.home.path}", manrope(11.5f, FontWeight.Normal, MintColors.ink(0.78f)), maxLines = 2)
-        }
+        AboutLauncher(app)
     }
 }
 
