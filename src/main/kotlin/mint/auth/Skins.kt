@@ -32,10 +32,21 @@ object Skins {
     suspend fun load(account: Account, minecraft: String): Skin? = withContext(Dispatchers.IO) {
         when (account.type) {
             AccountType.OFFLINE -> defaultSkin(minecraft)
-            AccountType.YGGDRASIL -> runCatching { fetch(account) }
+            AccountType.YGGDRASIL -> runCatching { fetch(account.authServer, account.uuid) }
                 .onFailure { System.err.println("[mint] скин не загружен: ${it.message}") }
-                .getOrNull() ?: cached(account) ?: defaultSkin(minecraft)
+                .getOrNull() ?: cached(account.uuid) ?: defaultSkin(minecraft)
         }
+    }
+
+    /**
+     * Скин другого игрока — для списка на вкладке сервера. [authServer] — сервер входа,
+     * через который сервер пускает игроков; null — сервер офлайн, скинов у игроков нет.
+     */
+    suspend fun player(uuid: String, authServer: String?, minecraft: String): Skin? = withContext(Dispatchers.IO) {
+        // Сервер пишет UUID с дефисами, Yggdrasil отдаёт без — кэш у них общий
+        val id = uuid.replace("-", "").lowercase()
+        if (authServer == null) return@withContext defaultSkin(minecraft)
+        runCatching { fetch(authServer, id) }.getOrNull() ?: cached(id) ?: defaultSkin(minecraft)
     }
 
     private fun sessionBase(server: String): String = when (server.trim().lowercase()) {
@@ -43,8 +54,8 @@ object Skins {
         else -> server.trim().trimEnd('/') + "/sessionserver"
     }
 
-    private suspend fun fetch(account: Account): Skin? {
-        val profile = Http.getJson("${sessionBase(account.authServer)}/session/minecraft/profile/${account.uuid}").jsonObject
+    private suspend fun fetch(authServer: String, uuid: String): Skin? {
+        val profile = Http.getJson("${sessionBase(authServer)}/session/minecraft/profile/$uuid").jsonObject
         val encoded = profile["properties"]?.jsonArray
             ?.map { it.jsonObject }
             ?.firstOrNull { it["name"]?.jsonPrimitive?.content == "textures" }
@@ -55,17 +66,17 @@ object Skins {
         val url = skin["url"]!!.jsonPrimitive.content
         val slim = skin["metadata"]?.jsonObject?.get("model")?.jsonPrimitive?.content == "slim"
 
-        val png = File(dir, "${account.uuid}.png")
+        val png = File(dir, "$uuid.png")
         png.delete()
         Http.download(DownloadTask(url, png))
-        File(dir, "${account.uuid}.model").writeText(if (slim) "slim" else "classic")
+        File(dir, "$uuid.model").writeText(if (slim) "slim" else "classic")
         return read(png, slim)
     }
 
-    private fun cached(account: Account): Skin? {
-        val png = File(dir, "${account.uuid}.png")
+    private fun cached(uuid: String): Skin? {
+        val png = File(dir, "$uuid.png")
         if (!png.isFile) return null
-        val slim = File(dir, "${account.uuid}.model").takeIf { it.isFile }?.readText() == "slim"
+        val slim = File(dir, "$uuid.model").takeIf { it.isFile }?.readText() == "slim"
         return read(png, slim)
     }
 

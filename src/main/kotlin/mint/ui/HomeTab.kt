@@ -163,7 +163,7 @@ private fun rememberArt(file: java.io.File?): ImageBitmap? {
 private fun ServerButton(app: AppState, onArt: Boolean) {
     val tint = if (onArt) MintColors.onArt(0.85f) else MintColors.ink(0.7f)
     val text = manrope(13.5f, FontWeight.SemiBold, if (onArt) MintColors.OnArt else MintColors.Ink)
-    val running = app.serverTabVisible
+    val running = app.serverActive
     OutlineButton(
         if (running) "Управление" else "Сервер",
         height = 52.dp, radius = 15.dp, onArt = onArt, textStyle = text,
@@ -274,9 +274,9 @@ private fun NewsCard(modifier: Modifier) {
     Card(modifier, radius = 15.dp, padding = PaddingValues(horizontal = 16.dp, vertical = 15.dp), spacing = 9.dp) {
         Txt("Что нового", manrope(12.5f, FontWeight.SemiBold))
         Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-            Txt("Mint 0.2.6 — сборка на сервере обновляется целиком", manrope(12f, FontWeight.SemiBold, MintColors.ink(0.85f)))
+            Txt("Mint 0.2.7 — лаунчер обновляется сам", manrope(12f, FontWeight.SemiBold, MintColors.ink(0.85f)))
             Txt(
-                "Файлы, исчезнувшие из сборки, теперь убираются и с сервера — старое больше не спорит с новым.",
+                "Новые версии ставятся одной кнопкой или автоматически при запуске. У сервера — игроки, мир и настройки.",
                 manrope(11.5f, FontWeight.Normal, MintColors.ink(0.78f), lineHeight = 16.7.sp),
                 maxLines = 3,
             )

@@ -25,6 +25,7 @@ import mint.ui.LoginScreen
 import mint.ui.MainScreen
 import mint.ui.MintColors
 import mint.ui.Screen
+import mint.ui.UpdateScreen
 import mint.ui.WindowActions
 import java.awt.Dimension
 
@@ -145,9 +146,10 @@ private fun gui() = application {
                 .background(MintColors.Window)
                 .border(1.dp, MintColors.ink(0.08f), shape)
         ) {
-            when (app.screen) {
-                Screen.Login -> LoginScreen(app, actions)
-                Screen.Main -> MainScreen(app, actions)
+            when {
+                app.updateOnStartup -> UpdateScreen(app, actions)
+                app.screen == Screen.Login -> LoginScreen(app, actions)
+                else -> MainScreen(app, actions)
             }
         }
     }
