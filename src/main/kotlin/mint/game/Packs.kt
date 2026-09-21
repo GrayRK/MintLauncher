@@ -39,6 +39,12 @@ data class PackSource(
     val name: String,
     val minecraft: String,
     val loader: Loader,
+    /** Одна строка под названием на карточке каталога. */
+    val tagline: String = "",
+    /** Абзацы описания для вкладки «Сборки». */
+    val description: List<String> = emptyList(),
+    /** Главное, что есть в сборке, — короткими пунктами. */
+    val highlights: List<String> = emptyList(),
 )
 
 /** Сторона, которой нужен файл сборки. */
@@ -84,7 +90,11 @@ private data class PackState(
 )
 
 object Packs {
-    /** Официальные сборки: появляются у игрока сразу после установки лаунчера. */
+    /**
+     * Официальные сборки: появляются у игрока сразу после установки лаунчера.
+     * Иконка и превью вшиты в лаунчер (resources/packs/<id>/icon.png, banner.jpg),
+     * чтобы каталог выглядел целым ещё до скачивания сборки.
+     */
     val official = listOf(
         PackSource(
             id = "createmint",
@@ -92,8 +102,40 @@ object Packs {
             name = "CreateMint",
             minecraft = "1.21.1",
             loader = Loader.NEOFORGE,
+            tagline = "Create, паровые механизмы и живописный мир",
+            description = listOf(
+                "Сборка вокруг Create: шестерни, валы, конвейеры и поезда, из которых собираются целые заводы. " +
+                    "Аддоны добавляют новые механизмы, декор и способы автоматизации, а MineColonies — " +
+                    "колонию жителей, которые строят и работают вместе с вами.",
+                "Мир генерирует Terralith: около сотни биомов из ванильных блоков, высокие горы и новые структуры. " +
+                    "Distant Horizons дорисовывает ландшафт до горизонта, а Sodium и Lithium держат FPS.",
+                "Играть можно одному или с друзьями: кнопка «Сервер» на главной поднимает сервер этой сборки прямо с вашего компьютера.",
+            ),
+            highlights = listOf(
+                "Create и аддоны",
+                "Колония MineColonies",
+                "Биомы Terralith",
+                "Дальняя прорисовка Distant Horizons",
+                "Sodium + Lithium",
+                "Свой сервер в один клик",
+            ),
+        ),
+        PackSource(
+            id = "testmint",
+            repo = "GrayRK/TestMint",
+            name = "TestMint",
+            minecraft = "1.21.1",
+            loader = Loader.NEOFORGE,
+            tagline = "Полигон для проверки модов и лаунчера",
+            description = listOf(
+                "Тестовая сборка: здесь проверяются новые моды, настройки и функции лаунчера, прежде чем попасть в основные сборки.",
+                "Состав может меняться в любой момент, а миры — ломаться. Для обычной игры выбирайте CreateMint.",
+            ),
+            highlights = listOf("Новые моды раньше основных сборок", "Проверка функций лаунчера"),
         ),
     )
+
+    fun info(id: String): PackSource? = official.firstOrNull { it.id == id }
 
     const val MANIFEST = "mint-pack.json"
     private const val STATE = ".mint-pack.json"

@@ -325,10 +325,12 @@ class AppState(private val scope: CoroutineScope, private val onHideWindow: (Boo
         instances = Instances.all()
     }
 
-    fun openInstanceFolder() {
-        val dir = selectedInstance.dir.apply { mkdirs() }
-        File(dir, "mods").mkdirs()
-        runCatching { Desktop.getDesktop().open(dir) }
+    /** Делает сборку активной: «Играть» и «Сервер» на главной относятся к ней. Сама игра не запускается. */
+    fun selectInstance(instance: Instance) {
+        if (instance.id == settings.selectedInstance) return
+        updateSettings { it.copy(selectedInstance = instance.id) }
+        // Стив по умолчанию берётся из клиента нужной версии Minecraft
+        reloadSkin()
     }
 
     fun cancelLaunch() {
