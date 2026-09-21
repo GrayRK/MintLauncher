@@ -34,7 +34,8 @@ fun FrameWindowScope.MainScreen(app: AppState, actions: WindowActions) {
             SideDock(app)
             Box(Modifier.weight(1f).fillMaxHeight()) {
                 when (app.tab) {
-                    Tab.Home, Tab.Instances, Tab.Mods -> HomeTab(app)
+                    Tab.Home, Tab.Mods -> HomeTab(app)
+                    Tab.Instances -> InstancesTab(app)
                     Tab.Server -> ServerTab(app)
                     Tab.Account -> AccountTab(app)
                     Tab.Settings -> SettingsTab(app)
@@ -72,8 +73,8 @@ private fun SideDock(app: AppState) {
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             DockButton(MintIcon.House, app.tab == Tab.Home) { app.tab = Tab.Home }
-            // Сборки и моды появятся позже
-            DockButton(MintIcon.Cube, app.tab == Tab.Instances) { }
+            DockButton(MintIcon.Cube, app.tab == Tab.Instances) { app.tab = Tab.Instances }
+            // Управление сборкой (моды, ресурспаки) появится позже
             DockButton(MintIcon.Puzzle, app.tab == Tab.Mods) { }
             // Сервер в доке всегда: игроками, миром и удалением управляют и у выключенного
             DockButton(MintIcon.Server, app.tab == Tab.Server) { app.tab = Tab.Server }

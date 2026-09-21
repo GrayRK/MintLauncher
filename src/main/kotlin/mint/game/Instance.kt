@@ -25,8 +25,10 @@ data class Instance(
     val dir get() = File(MintPaths.instances, id)
     val modsDir get() = File(dir, "mods")
 
-    /** Арт сборки для главной; null — рисуем обычный мятный градиент. */
-    val banner: File? get() = File(dir, "banner.png").takeIf { it.isFile }
+    /** Сборка скачана: в папке есть что-то кроме заглушки instance.json. */
+    val installed: Boolean
+        get() = dir.listFiles().orEmpty().any { it.name != "instance.json" && it.name != "mods" } ||
+            modsDir.listFiles().orEmpty().isNotEmpty()
 
     /** id версии в каталоге versions/, которую нужно запускать. */
     val versionId: String
@@ -35,16 +37,18 @@ data class Instance(
             Loader.NEOFORGE -> "neoforge-$loaderVersion"
         }
 
+    val modCount: Int get() = modsDir.listFiles { f -> f.isFile && f.name.endsWith(".jar") }?.size ?: 0
+
     val subtitle: String
         get() = buildString {
             append(minecraft).append(" · ")
             append(if (loader == Loader.NEOFORGE) "NeoForge" else "Vanilla")
-            val mods = modsDir.listFiles { f -> f.isFile && f.name.endsWith(".jar") }?.size ?: 0
-            if (loader != Loader.VANILLA) append(" · ").append(pluralMods(mods))
+            // До скачивания число модов неизвестно — «0 модов» только сбивало бы с толку
+            if (loader != Loader.VANILLA && installed) append(" · ").append(pluralMods(modCount))
         }
 }
 
-private fun pluralMods(n: Int): String {
+fun pluralMods(n: Int): String {
     val mod10 = n % 10
     val mod100 = n % 100
     val word = when {

@@ -19,16 +19,13 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.res.loadImageBitmap
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -56,7 +53,7 @@ fun HomeTab(app: AppState) {
 private fun Hero(app: AppState, modifier: Modifier) {
     val shape = RoundedCornerShape(18.dp)
     val instance = app.selectedInstance
-    val art = rememberArt(instance.banner)
+    val art = PackArt.banner(instance)
     val onArt = art != null
 
     // Поверх арта чернильные цвета не читаются — берём светлую пару
@@ -141,15 +138,6 @@ private fun Hero(app: AppState, modifier: Modifier) {
     }
 }
 
-/** Арт сборки читается с диска один раз; файла нет или он битый — рисуем градиент. */
-@Composable
-private fun rememberArt(file: java.io.File?): ImageBitmap? {
-    if (file == null) return null
-    return remember(file.path, file.lastModified()) {
-        runCatching { file.inputStream().buffered().use { loadImageBitmap(it) } }.getOrNull()
-    }
-}
-
 /** Кнопка локального сервера: выключенный запускаем, запущенным управляем на его вкладке. */
 @Composable
 private fun ServerButton(app: AppState, onArt: Boolean) {
@@ -198,7 +186,7 @@ fun copyToClipboard(text: String) = runCatching {
 }
 
 @Composable
-private fun DiagonalStripes(modifier: Modifier) {
+fun DiagonalStripes(modifier: Modifier) {
     val color = MintColors.ink(0.055f)
     Canvas(modifier) {
         // repeating-linear-gradient(115deg, ... 1px, transparent 13px): линии перпендикулярны направлению 115°
@@ -220,24 +208,33 @@ private fun InstancesCard(app: AppState, modifier: Modifier) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Txt("Мои сборки", manrope(12.5f, FontWeight.SemiBold))
             Spacer()
-            LinkText("папка", manrope(11f, color = MintColors.MintDeep)) { app.openInstanceFolder() }
+            LinkText("все", manrope(11f, color = MintColors.MintDeep)) { app.tab = Tab.Instances }
         }
-        Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             app.instances.take(3).forEach { instance ->
                 val selected = instance.id == app.selectedInstance.id
                 val (source, hovered) = rememberHover()
                 Row(
-                    Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp))
-                        .background(if (hovered) MintColors.ink(0.04f) else Color.Transparent)
-                        .clickableNoRipple(source) { app.updateSettings { it.copy(selectedInstance = instance.id) } },
+                    Modifier.fillMaxWidth().clip(RoundedCornerShape(9.dp))
+                        .background(
+                            when {
+                                selected -> MintColors.Mint.copy(alpha = 0.28f)
+                                hovered -> MintColors.ink(0.04f)
+                                else -> Color.Transparent
+                            }
+                        )
+                        .clickableNoRipple(source) { app.selectInstance(instance) }
+                        .padding(4.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(9.dp),
                 ) {
-                    Box(
-                        Modifier.size(26.dp).clip(RoundedCornerShape(8.dp))
-                            .background(if (selected) MintColors.Mint.copy(alpha = 0.5f) else MintColors.SandDark.copy(alpha = 0.7f))
+                    PackIcon(instance, 26.dp, 7.dp)
+                    Txt(
+                        instance.name,
+                        manrope(12f, if (selected) FontWeight.SemiBold else FontWeight.Normal, MintColors.ink(0.85f)),
+                        Modifier.weight(1f), maxLines = 1,
                     )
-                    Txt(instance.name, manrope(12f, color = MintColors.ink(0.85f)), maxLines = 1)
+                    if (selected) Icon(MintIcon.Check, 13.dp, MintColors.MintDeep)
                 }
             }
         }
@@ -249,9 +246,9 @@ private fun NewsCard(modifier: Modifier) {
     Card(modifier, radius = 15.dp, padding = PaddingValues(horizontal = 16.dp, vertical = 15.dp), spacing = 9.dp) {
         Txt("Что нового", manrope(12.5f, FontWeight.SemiBold))
         Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-            Txt("Mint 0.2.8 — без консоли на главной", manrope(12f, FontWeight.SemiBold, MintColors.ink(0.85f)))
+            Txt("Mint 0.2.9 — каталог сборок", manrope(12f, FontWeight.SemiBold, MintColors.ink(0.85f)))
             Txt(
-                "Вывод игры больше не закрывает арт сборки. Консоль переедет в отдельное место, а пока лог — в data/logs.",
+                "На вкладке «Сборки» — описание каждой сборки и выбор активной. Появилась тестовая сборка TestMint.",
                 manrope(11.5f, FontWeight.Normal, MintColors.ink(0.78f), lineHeight = 16.7.sp),
                 maxLines = 3,
             )
