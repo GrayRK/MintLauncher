@@ -48,14 +48,28 @@ object Http {
         .connectTimeout(Duration.ofSeconds(20))
         .build()
 
+    /**
+     * GET с повторами: один таймаут соединения не должен ронять запуск игры.
+     * Повторять GET безопасно — он ничего не меняет на той стороне.
+     */
     suspend fun getString(url: String): String = withContext(Dispatchers.IO) {
         val request = HttpRequest.newBuilder(URI(url))
             .header("User-Agent", USER_AGENT)
             .timeout(REQUEST_TIMEOUT)
             .GET().build()
-        val response = client.send(request, HttpResponse.BodyHandlers.ofString())
-        if (response.statusCode() !in 200..299) throw IOException("HTTP ${response.statusCode()}: $url")
-        response.body()
+        var last: Exception? = null
+        repeat(3) { attempt ->
+            ensureActive()
+            try {
+                val response = client.send(request, HttpResponse.BodyHandlers.ofString())
+                if (response.statusCode() !in 200..299) throw IOException("HTTP ${response.statusCode()}: $url")
+                return@withContext response.body()
+            } catch (e: Exception) {
+                last = e
+                if (attempt < 2) Thread.sleep(700L * (attempt + 1))
+            }
+        }
+        throw IOException("Не удалось получить $url: ${last?.message}", last)
     }
 
     suspend fun getJson(url: String): JsonElement = MintJson.parseToJsonElement(getString(url))

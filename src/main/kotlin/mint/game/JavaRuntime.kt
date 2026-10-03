@@ -43,25 +43,68 @@ object JavaRuntime {
 
     fun managed(): JavaInfo? = inspect(managedJavaw)
 
-    /** Скачивает Temurin JRE 21 в runtime/java-21, если его ещё нет. */
-    suspend fun ensureManaged(progress: ProgressSink): JavaInfo {
-        managed()?.let { if (it.major == MAJOR) return it }
-        progress.report("Поиск Java $MAJOR", null)
+    /** Откуда брать Java: ссылка на архив, его sha256 и размер (если известен). */
+    private data class JavaSource(val name: String, val link: String, val sha256: String?, val size: Long)
+
+    /**
+     * Temurin от Adoptium — основной источник, его архив меньше (JRE против JDK).
+     * Запрос идёт к `api.adoptium.net`, а сам файл лежит на GitHub.
+     */
+    private suspend fun adoptium(): JavaSource {
         val assets = Http.getJson(
             "https://api.adoptium.net/v3/assets/latest/$MAJOR/hotspot?architecture=x64&image_type=jre&os=windows&vendor=eclipse"
         ).jsonArray
         val pkg = assets.first().jsonObject.obj("binary").obj("package")
-        val link = pkg.str("link")!!
-        val sha256 = pkg.str("checksum")
-        val size = pkg.long("size") ?: -1
+        return JavaSource("Temurin", pkg.str("link")!!, pkg.str("checksum"), pkg.long("size") ?: -1)
+    }
+
+    /**
+     * Amazon Corretto — запасной источник на случай, когда Adoptium или GitHub недоступны
+     * (03.10: на другом компьютере установка падала с `HTTP connect timed out`).
+     * Ссылка без номера версии всегда ведёт на свежую сборку, рядом лежит её sha256.
+     * Это JDK, он тяжелее JRE, зато живёт на другой сети — CloudFront вместо GitHub.
+     */
+    private suspend fun corretto(): JavaSource {
+        val file = "amazon-corretto-$MAJOR-x64-windows-jdk.zip"
+        val sha = runCatching { Http.getString("https://corretto.aws/downloads/latest_sha256/$file").trim() }
+            .getOrNull()?.takeIf { it.length == 64 }
+        return JavaSource("Corretto", "https://corretto.aws/downloads/latest/$file", sha, -1)
+    }
+
+    /** Скачивает Java 21 в runtime/java-21, если её ещё нет. */
+    suspend fun ensureManaged(progress: ProgressSink): JavaInfo {
+        managed()?.let { if (it.major == MAJOR) return it }
+        progress.report("Поиск Java $MAJOR", null)
+
+        val errors = mutableListOf<String>()
+        var source: JavaSource? = null
+        for (candidate in listOf(::adoptium, ::corretto)) {
+            try {
+                source = candidate()
+                break
+            } catch (e: Exception) {
+                errors += e.message ?: e.toString()
+            }
+        }
+        if (source == null) {
+            throw IOException(
+                "Не удалось получить Java $MAJOR: ни Adoptium, ни Corretto не отвечают " +
+                    "(${errors.joinToString("; ")}). Проверьте подключение к интернету. " +
+                    "Если доступ к ним закрыт, установите Java $MAJOR сами и укажите путь " +
+                    "в «Настройки → Java»."
+            )
+        }
+        val link = source.link
+        val sha256 = source.sha256
+        val size = source.size
 
         val zip = File(MintPaths.cache, "java-$MAJOR.zip")
         var received = 0L
         Http.download(DownloadTask(link, zip, size = size)) { n ->
             received += n
-            if (size > 0) progress.report("Загрузка Java $MAJOR", received.toFloat() / size)
+            if (size > 0) progress.report("Загрузка Java $MAJOR (${source.name})", received.toFloat() / size)
         }
-        progress.report("Распаковка Java $MAJOR", null)
+        progress.report("Распаковка Java $MAJOR (${source.name})", null)
         withContext(Dispatchers.IO) {
             if (sha256 != null && !sha256File(zip).equals(sha256, ignoreCase = true)) {
                 zip.delete()
