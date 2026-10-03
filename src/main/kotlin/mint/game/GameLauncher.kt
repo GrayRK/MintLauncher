@@ -5,6 +5,7 @@ import kotlinx.coroutines.withContext
 import mint.auth.AuthlibInjector
 import mint.core.Account
 import mint.core.AccountType
+import mint.core.Gc
 import mint.core.LauncherSettings
 import mint.core.MintPaths
 import java.io.File
@@ -14,7 +15,7 @@ import kotlin.concurrent.thread
 
 object GameLauncher {
     const val LAUNCHER_NAME = "Mint"
-    const val LAUNCHER_VERSION = "0.2.9"
+    const val LAUNCHER_VERSION = "0.3.0"
 
     suspend fun resolveJava(settings: LauncherSettings, progress: ProgressSink): JavaInfo =
         if (settings.javaAuto) {
@@ -93,11 +94,21 @@ object GameLauncher {
             if (account.type == AccountType.YGGDRASIL) add(AuthlibInjector.agentArg(account))
             add("-Xms512M")
             add("-Xmx${memory}M")
-            add("-XX:+UseG1GC")
-            add("-XX:+UnlockExperimentalVMOptions")
-            add("-XX:G1NewSizePercent=20")
-            add("-XX:G1ReservePercent=20")
-            add("-XX:MaxGCPauseMillis=50")
+            when (settings.gc) {
+                Gc.G1 -> {
+                    add("-XX:+UseG1GC")
+                    add("-XX:+UnlockExperimentalVMOptions")
+                    add("-XX:G1NewSizePercent=20")
+                    add("-XX:G1ReservePercent=20")
+                    add("-XX:MaxGCPauseMillis=50")
+                }
+                // Поколенческий ZGC из Java 21. Настройки G1 сюда не передаём — они не его
+                // и только засоряют командную строку; размер пауз ZGC не регулируется.
+                Gc.ZGC -> {
+                    add("-XX:+UseZGC")
+                    add("-XX:+ZGenerational")
+                }
+            }
             VanillaInstaller.loggingConfigFile(version)?.takeIf { it.isFile }?.let { cfg ->
                 version.logging?.str("argument")?.let { add(it.replace("\${path}", cfg.absolutePath)) }
             }

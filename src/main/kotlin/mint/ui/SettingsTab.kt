@@ -31,6 +31,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import mint.core.Gc
 import mint.core.Theme
 import mint.game.GameLauncher
 import mint.game.JavaRuntime
@@ -44,7 +45,9 @@ import kotlin.math.roundToInt
 fun SettingsTab(app: AppState) {
     val s = app.settings
     val maxGb = systemRamGb().coerceIn(4, 64)
-    val recommended = if (maxGb >= 12) 6 else 4
+    // ZGC по умолчанию: ему нужен запас, иначе потоки встают в ожидании памяти.
+    val minimumGb = 6
+    val recommended = if (maxGb >= 12) 8 else 6
 
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 36.dp, vertical = 30.dp),
@@ -66,7 +69,10 @@ fun SettingsTab(app: AppState) {
             Row {
                 Txt("2 ГБ", manrope(11.5f, color = MintColors.ink(0.78f)))
                 Spacer()
-                Txt("рекомендуем $recommended ГБ", manrope(11.5f, color = MintColors.ink(0.78f)))
+                Txt(
+                    "минимум $minimumGb ГБ · рекомендуем $recommended ГБ",
+                    manrope(11.5f, color = MintColors.ink(0.78f)),
+                )
                 Spacer()
                 Txt("$maxGb ГБ", manrope(11.5f, color = MintColors.ink(0.78f)))
             }
@@ -131,6 +137,22 @@ fun SettingsTab(app: AppState) {
             ToggleRow("Закрывать лаунчер при запуске игры", "Лаунчер скроется и вернётся после выхода из игры", s.closeOnLaunch) { v ->
                 app.updateSettings { it.copy(closeOnLaunch = v) }
             }
+        }
+        Card(spacing = 11.dp) {
+            Txt("Сборщик мусора", manrope(13.5f, FontWeight.SemiBold))
+            val gcs = listOf(Gc.G1, Gc.ZGC)
+            Segmented(
+                listOf("G1", "ZGC"), gcs.indexOf(s.gc).coerceAtLeast(0),
+                onSelect = { i -> app.updateSettings { it.copy(gc = gcs[i]) } },
+                modifier = Modifier.width(280.dp),
+            )
+            Txt(
+                when (s.gc) {
+                    Gc.G1 -> "Экономнее по памяти, но останавливает игру на 6–12 мс — это заметные подёргивания"
+                    Gc.ZGC -> "Паузы меньше миллисекунды, кадры ровнее. Нужен запас памяти: минимум 6 ГБ, лучше 8"
+                },
+                manrope(11.5f, FontWeight.Normal, MintColors.ink(0.78f)),
+            )
         }
 
         Section("Внешний вид")

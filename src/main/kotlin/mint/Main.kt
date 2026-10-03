@@ -30,20 +30,23 @@ import mint.ui.WindowActions
 import java.awt.Dimension
 
 fun main(args: Array<String>) {
-    if (args.firstOrNull() == "--headless") return headless(args.getOrElse(1) { "Steve" })
+    if (args.firstOrNull() == "--headless") return headless(args.getOrElse(1) { "Steve" }, args.getOrNull(2))
     if (args.firstOrNull() == "--pack-manifest") return packManifest(args.getOrElse(1) { "createmint" })
     if (args.firstOrNull() == "--pack-sync") return packSync(args.getOrElse(1) { "createmint" })
     if (args.firstOrNull() == "--server") return server(args.getOrElse(1) { "createmint" })
     gui()
 }
 
-/** Служебный режим: установка и запуск сборки без UI, вывод в консоль. */
-private fun headless(nick: String) = kotlinx.coroutines.runBlocking {
+/** Служебный режим: установка и запуск сборки без UI (по умолчанию — первой), вывод в консоль. */
+private fun headless(nick: String, id: String?) = kotlinx.coroutines.runBlocking {
+    val all = mint.game.Instances.all()
+    val target = if (id == null) all.first()
+    else all.firstOrNull { it.id == id } ?: return@runBlocking println("[mint] сборка «$id» не найдена в ${mint.core.MintPaths.instances}")
     val settings = mint.core.SettingsStore.load()
     val progress = mint.game.ProgressSink { stage, f -> println("[mint] $stage ${f?.let { "%.0f%%".format(it * 100) } ?: ""}") }
     val java = mint.game.GameLauncher.resolveJava(settings, progress)
     println("[mint] ${java.label} -> ${java.executable}")
-    val (instance, version) = mint.game.GameLauncher.prepare(mint.game.Instances.all().first(), java, progress)
+    val (instance, version) = mint.game.GameLauncher.prepare(target, java, progress)
     val done = kotlinx.coroutines.CompletableDeferred<Int>()
     mint.game.GameLauncher.launch(
         instance, version, java, mint.auth.Auth.offline(nick), settings,

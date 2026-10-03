@@ -246,9 +246,9 @@ private fun NewsCard(modifier: Modifier) {
     Card(modifier, radius = 15.dp, padding = PaddingValues(horizontal = 16.dp, vertical = 15.dp), spacing = 9.dp) {
         Txt("Что нового", manrope(12.5f, FontWeight.SemiBold))
         Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-            Txt("Mint 0.2.9 — каталог сборок", manrope(12f, FontWeight.SemiBold, MintColors.ink(0.85f)))
+            Txt("Mint 0.3.0 — сборка VanillaCasual", manrope(12f, FontWeight.SemiBold, MintColors.ink(0.85f)))
             Txt(
-                "На вкладке «Сборки» — описание каждой сборки и выбор активной. Появилась тестовая сборка TestMint.",
+                "Ванильная игра, доведённая до ума, — уже на вкладке «Сборки». Игра запускается на сборщике мусора ZGC: пауз меньше.",
                 manrope(11.5f, FontWeight.Normal, MintColors.ink(0.78f), lineHeight = 16.7.sp),
                 maxLines = 3,
             )
