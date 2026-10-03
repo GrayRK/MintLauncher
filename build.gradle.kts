@@ -8,7 +8,7 @@ plugins {
 }
 
 group = "mint"
-version = "0.3.0"
+version = "0.3.1"
 
 dependencies {
     implementation(compose.desktop.currentOs)
@@ -30,6 +30,11 @@ kotlin {
 compose.desktop {
     application {
         mainClass = "mint.MainKt"
+
+        // Без предела JVM берёт четверть памяти машины (на 32 ГБ — восемь), и лаунчер
+        // спокойно разрастается до двух с лишним гигабайт рядом с игрой и сервером.
+        // Ему нужны только интерфейс, картинки сборок и скины — этого хватает с запасом.
+        jvmArgs("-Xmx768m", "-XX:MaxMetaspaceSize=256m")
 
         nativeDistributions {
             targetFormats(TargetFormat.Exe, TargetFormat.Msi)

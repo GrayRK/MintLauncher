@@ -5,6 +5,7 @@ import kotlinx.coroutines.withContext
 import mint.auth.AuthlibInjector
 import mint.core.AccountType
 import mint.core.DownloadTask
+import mint.core.Gc
 import mint.core.Http
 import mint.core.LauncherSettings
 import mint.core.MintJson
@@ -158,18 +159,30 @@ object ServerLauncher {
         )
     }
 
+    /**
+     * Сервер Mint живёт на компьютере игрока, и игра запускается рядом. Две JVM делят
+     * один процессор, поэтому сервер получает половину ядер через `ActiveProcessorCount`:
+     * моды, которые считают потоки от `availableProcessors` (C2ME, а за ним и Distant
+     * Horizons), сами уменьшат свои пулы. Без этого обе стороны берут по шесть рабочих
+     * потоков каждая и упираются в 100 % — измерено 03.10 на 6-ядерном Ryzen.
+     *
+     * Сборщик мусора — тот же, что выбран для игры: Distant Horizons прямо предупреждает
+     * в логе сервера, что на G1 будут рывки.
+     */
     private fun writeJvmArgs(root: File, settings: LauncherSettings, agent: String?) {
         val memory = settings.serverMemoryMb
-        File(root, "user_jvm_args.txt").writeText(
-            """
-            # Создано лаунчером Mint — правится в настройках лаунчера
-            -Xms1024M
-            -Xmx${memory}M
-            -XX:+UseG1GC
-            -XX:+UnlockExperimentalVMOptions
-            -XX:MaxGCPauseMillis=50
-            """.trimIndent() + "\n" + (agent?.let { "$it\n" } ?: "")
-        )
+        val cores = (Runtime.getRuntime().availableProcessors() / 2).coerceAtLeast(2)
+        val gc = when (settings.gc) {
+            Gc.G1 -> listOf("-XX:+UseG1GC", "-XX:+UnlockExperimentalVMOptions", "-XX:MaxGCPauseMillis=50")
+            Gc.ZGC -> listOf("-XX:+UseZGC", "-XX:+ZGenerational")
+        }
+        val lines = listOf(
+            "# Создано лаунчером Mint — правится в настройках лаунчера",
+            "-Xms1024M",
+            "-Xmx${memory}M",
+            "-XX:ActiveProcessorCount=$cores",
+        ) + gc + listOfNotNull(agent)
+        File(root, "user_jvm_args.txt").writeText(lines.joinToString("\n") + "\n")
     }
 
     /**
